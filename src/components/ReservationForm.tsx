@@ -59,6 +59,17 @@ export default function ReservationForm({
 
   return (
     <Card>
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-base font-bold">Log a court</h2>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="-mr-1 rounded-lg px-2 py-1 text-sm font-medium text-muted active:bg-gray-100"
+          aria-label="Back"
+        >
+          ✕ Back
+        </button>
+      </div>
       <form onSubmit={submit} className="flex flex-col gap-4">
         <Field label="Court number (1–53)">
           <div className="flex items-center gap-3">

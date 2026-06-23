@@ -8,7 +8,8 @@ type Mode = "choose" | "reading" | "confirm";
 
 export default function PostCredential({ onPosted }: { onPosted: () => void }) {
   const { show } = useToast();
-  const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null); // opens camera on phones
+  const uploadRef = useRef<HTMLInputElement>(null); // pick an existing image (any device)
   const [mode, setMode] = useState<Mode>("choose");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
@@ -17,6 +18,7 @@ export default function PostCredential({ onPosted }: { onPosted: () => void }) {
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file later
     if (!file) return;
     if (file.size > 10 * 1024 * 1024) {
       show("Photo too large (max 10MB). Retake or enter manually.", "err");
@@ -70,20 +72,33 @@ export default function PostCredential({ onPosted }: { onPosted: () => void }) {
   if (mode === "choose") {
     return (
       <Card>
-        <p className="mb-3 text-sm font-semibold">Post a court login</p>
+        <p className="mb-1 text-sm font-semibold">Post a court login</p>
+        <p className="mb-3 text-xs text-muted">
+          Snap the kiosk screen and we&apos;ll read the name &amp; password — or enter them yourself.
+        </p>
         <div className="grid grid-cols-2 gap-2">
-          <Button variant="secondary" onClick={() => fileRef.current?.click()}>
-            📷 Screenshot
+          <Button variant="secondary" onClick={() => cameraRef.current?.click()}>
+            📷 Take photo
           </Button>
-          <Button variant="secondary" onClick={() => setMode("confirm")}>
-            ⌨️ Manual
+          <Button variant="secondary" onClick={() => uploadRef.current?.click()}>
+            🖼 Upload image
           </Button>
         </div>
+        <Button variant="ghost" className="mt-2 w-full" onClick={() => setMode("confirm")}>
+          ⌨️ Enter manually
+        </Button>
         <input
-          ref={fileRef}
+          ref={cameraRef}
           type="file"
           accept="image/png,image/jpeg"
           capture="environment"
+          className="hidden"
+          onChange={onFile}
+        />
+        <input
+          ref={uploadRef}
+          type="file"
+          accept="image/png,image/jpeg"
           className="hidden"
           onChange={onFile}
         />
@@ -104,6 +119,17 @@ export default function PostCredential({ onPosted }: { onPosted: () => void }) {
 
   return (
     <Card>
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-base font-bold">Confirm login</h2>
+        <button
+          type="button"
+          onClick={reset}
+          className="-mr-1 rounded-lg px-2 py-1 text-sm font-medium text-muted active:bg-gray-100"
+          aria-label="Back"
+        >
+          ✕ Back
+        </button>
+      </div>
       <div className="flex flex-col gap-3">
         <Field label="Name (blue text)">
           <TextInput value={name} onChange={(e) => setName(e.target.value)} className="text-name font-bold" placeholder="Sharan" />
@@ -111,14 +137,9 @@ export default function PostCredential({ onPosted }: { onPosted: () => void }) {
         <Field label="Password (red text)">
           <TextInput value={password} onChange={(e) => setPassword(e.target.value)} className="text-pass font-bold" placeholder="tiger77" />
         </Field>
-        <div className="flex gap-2">
-          <Button variant="ghost" className="flex-1" onClick={reset}>
-            Cancel
-          </Button>
-          <Button className="flex-1" loading={busy} onClick={post}>
-            Confirm &amp; Post
-          </Button>
-        </div>
+        <Button className="w-full" loading={busy} onClick={post}>
+          Confirm &amp; Post
+        </Button>
       </div>
     </Card>
   );

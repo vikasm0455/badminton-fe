@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -78,6 +79,19 @@ export default function NewPollPage() {
           </div>
         </form>
       </Card>
+
+      {user?.is_admin && (
+        <Link
+          href="/admin/data"
+          className="flex items-center justify-between rounded-2xl bg-surface px-4 py-3 text-sm shadow-sm ring-1 ring-black/5"
+        >
+          <span>
+            ⏰ <span className="font-medium">Auto-poll scheduler</span>
+            <span className="block text-xs text-muted">Create today&apos;s poll automatically each morning</span>
+          </span>
+          <span className="text-muted">›</span>
+        </Link>
+      )}
     </div>
   );
 }
