@@ -63,7 +63,7 @@ export default function CourtsPage() {
       </button>
       {showMap && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src="/court-map.png" alt="Bintang court map" className="w-full rounded-xl border border-gray-200" />
+        <img src="/court-map.svg" alt="Bintang court map" className="w-full rounded-xl border border-gray-200" />
       )}
 
       {showForm && (
