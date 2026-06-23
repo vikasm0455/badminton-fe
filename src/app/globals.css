@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand: #2e7d32;
+  --color-brand-dark: #1b5e20;
+  --color-brand-light: #e8f5e9;
+  --color-name: #1565c0;
+  --color-pass: #c62828;
+  --color-warn: #f9a825;
+  --color-urgent: #e53935;
+  --color-ink: #1a1a1a;
+  --color-muted: #6b7280;
+  --color-surface: #ffffff;
+  --color-bg: #f4f6f8;
+}
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Respect iOS safe areas (notch / home indicator). */
+.safe-top { padding-top: env(safe-area-inset-top); }
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+
+/* Minimum 44px touch targets (PRD §16.4). */
+button,
+a[role="button"],
+.tap {
+  min-height: 44px;
+}
+
+@keyframes pulse-urgent {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+.animate-urgent { animation: pulse-urgent 1s ease-in-out infinite; }
+
+/* Hide scrollbars on horizontal chip rows but keep scroll. */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
