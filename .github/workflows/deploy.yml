@@ -27,6 +27,8 @@ jobs:
         with:
           context: .
           push: true
+          build-args: |
+            API_PROXY=http://badminton-be-rust:8090
           tags: ${{ secrets.DOCKER_USERNAME }}/badminton-fe:latest
           no-cache: true
           provenance: false

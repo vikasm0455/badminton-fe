@@ -7,6 +7,8 @@ RUN npm ci
 # ---- build ----------------------------------------------------------------
 FROM node:20-alpine AS builder
 WORKDIR /app
+ARG API_PROXY=http://badminton-be-rust:8090
+ENV API_PROXY=$API_PROXY
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
