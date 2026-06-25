@@ -3,20 +3,25 @@ import { useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import type { CredentialView } from "@/lib/types";
 import { Button, Card, Field, TextInput, useToast } from "./ui";
+import PostCredential from "./PostCredential";
 
 export default function ReservationForm({
   creds,
   onCreated,
   onCancel,
+  onCredsChanged,
 }: {
   creds: CredentialView[];
   onCreated: () => void;
   onCancel: () => void;
+  /** Refresh the credential list after a login is added inline. */
+  onCredsChanged?: () => void;
 }) {
   const { show } = useToast();
   const [court, setCourt] = useState(1);
   const [courtType, setCourtType] = useState<"full" | "half">("full");
   const [credId, setCredId] = useState<string>("");
+  const [showAddLogin, setShowAddLogin] = useState(false);
   const [players, setPlayers] = useState(4);
   const [duration, setDuration] = useState(45);
   const [startType, setStartType] = useState<"now" | "at_time">("now");
@@ -121,6 +126,33 @@ export default function ReservationForm({
               </option>
             ))}
           </select>
+          {!showAddLogin ? (
+            <button
+              type="button"
+              onClick={() => setShowAddLogin(true)}
+              className="mt-2 text-sm font-medium text-brand-dark"
+            >
+              📷 Scan / add a login
+            </button>
+          ) : (
+            <div className="mt-2">
+              <PostCredential
+                onPosted={(c) => {
+                  setCredId(c.id);
+                  setShowAddLogin(false);
+                  onCredsChanged?.();
+                  show(`Login “${c.bintang_name}” added & selected`, "ok");
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowAddLogin(false)}
+                className="mt-1 text-xs font-medium text-muted"
+              >
+                Cancel adding login
+              </button>
+            </div>
+          )}
         </Field>
 
         <div className="grid grid-cols-2 gap-3">

@@ -52,22 +52,36 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   return json.data as T;
 }
 
-/** Multipart upload (credential screenshot OCR). */
+/** Multipart upload (credential screenshot OCR / board scan). */
 async function postForm<T>(path: string, form: FormData): Promise<T> {
-  const res = await fetch(path, {
-    method: "POST",
-    credentials: "include",
-    body: form,
-    cache: "no-store",
-  });
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 45_000);
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method: "POST",
+      credentials: "include",
+      body: form,
+      cache: "no-store",
+      signal: ctrl.signal,
+    });
+  } catch {
+    throw new ApiError("Upload failed — check your connection and try again.", 0);
+  } finally {
+    clearTimeout(timer);
+  }
   let json: ApiEnvelope<T> | null = null;
   try {
     json = (await res.json()) as ApiEnvelope<T>;
   } catch {
-    /* ignore */
+    /* non-JSON (e.g. a bare proxy 502) */
   }
   if (!res.ok || !json || json.success === false) {
-    throw new ApiError(json?.message || `Upload failed (${res.status})`, res.status);
+    const fallback =
+      res.status >= 500
+        ? "Upload failed — try a screenshot, or enter the details manually."
+        : `Upload failed (${res.status})`;
+    throw new ApiError(json?.message || fallback, res.status);
   }
   return json.data as T;
 }

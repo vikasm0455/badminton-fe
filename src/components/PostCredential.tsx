@@ -1,27 +1,25 @@
 "use client";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import type { CredentialView, OcrResult } from "@/lib/types";
 import { Button, Card, Field, Spinner, TextInput, useToast } from "./ui";
+import CaptureButtons from "./CaptureButtons";
 
 type Mode = "choose" | "reading" | "confirm";
 
-export default function PostCredential({ onPosted }: { onPosted: () => void }) {
+export default function PostCredential({ onPosted }: { onPosted: (cred: CredentialView) => void }) {
   const { show } = useToast();
-  const cameraRef = useRef<HTMLInputElement>(null); // opens camera on phones
-  const uploadRef = useRef<HTMLInputElement>(null); // pick an existing image (any device)
   const [mode, setMode] = useState<Mode>("choose");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [shotPath, setShotPath] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = ""; // allow re-selecting the same file later
-    if (!file) return;
-    if (file.size > 10 * 1024 * 1024) {
-      show("Photo too large (max 10MB). Retake or enter manually.", "err");
+  async function onFile(file: File) {
+    // Images are downscaled in CaptureButtons before they reach here; this is
+    // just a sanity ceiling for a pathological un-decodable file.
+    if (file.size > 40 * 1024 * 1024) {
+      show("That image is too large. Try a screenshot or enter manually.", "err");
       return;
     }
     setMode("reading");
@@ -47,14 +45,14 @@ export default function PostCredential({ onPosted }: { onPosted: () => void }) {
     }
     setBusy(true);
     try {
-      await api.post<CredentialView>("/api/credentials", {
+      const created = await api.post<CredentialView>("/api/credentials", {
         bintang_name: name.trim(),
         bintang_password: password.trim(),
         screenshot_path: shotPath,
       });
       show("Login posted", "ok");
       reset();
-      onPosted();
+      onPosted(created);
     } catch (err) {
       show(err instanceof ApiError ? err.message : "Could not post", "err");
     } finally {
@@ -76,32 +74,10 @@ export default function PostCredential({ onPosted }: { onPosted: () => void }) {
         <p className="mb-3 text-xs text-muted">
           Snap the kiosk screen and we&apos;ll read the name &amp; password — or enter them yourself.
         </p>
-        <div className="grid grid-cols-2 gap-2">
-          <Button variant="secondary" onClick={() => cameraRef.current?.click()}>
-            📷 Take photo
-          </Button>
-          <Button variant="secondary" onClick={() => uploadRef.current?.click()}>
-            🖼 Upload image
-          </Button>
-        </div>
+        <CaptureButtons onFile={onFile} />
         <Button variant="ghost" className="mt-2 w-full" onClick={() => setMode("confirm")}>
           ⌨️ Enter manually
         </Button>
-        <input
-          ref={cameraRef}
-          type="file"
-          accept="image/png,image/jpeg"
-          capture="environment"
-          className="hidden"
-          onChange={onFile}
-        />
-        <input
-          ref={uploadRef}
-          type="file"
-          accept="image/png,image/jpeg"
-          className="hidden"
-          onChange={onFile}
-        />
       </Card>
     );
   }

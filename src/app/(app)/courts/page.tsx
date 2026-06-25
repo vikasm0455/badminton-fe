@@ -7,6 +7,7 @@ import type { CredentialView, ReservationView } from "@/lib/types";
 import { Button, Card, EmptyState, PageHeader, Spinner } from "@/components/ui";
 import ReservationCard from "@/components/ReservationCard";
 import ReservationForm from "@/components/ReservationForm";
+import BoardScan from "@/components/BoardScan";
 
 export default function CourtsPage() {
   const { user } = useAuth();
@@ -14,6 +15,7 @@ export default function CourtsPage() {
   const [creds, setCreds] = useState<CredentialView[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [showScan, setShowScan] = useState(false);
   const [showMap, setShowMap] = useState(false);
 
   const loadRes = useCallback(
@@ -50,10 +52,16 @@ export default function CourtsPage() {
       <PageHeader
         title="Courts"
         action={
-          !showForm && (
-            <Button className="px-3 py-2 text-sm" onClick={() => setShowForm(true)}>
-              + Log court
-            </Button>
+          !showForm &&
+          !showScan && (
+            <div className="flex gap-2">
+              <Button variant="secondary" className="px-3 py-2 text-sm" onClick={() => setShowScan(true)}>
+                📷 Scan board
+              </Button>
+              <Button className="px-3 py-2 text-sm" onClick={() => setShowForm(true)}>
+                + Log court
+              </Button>
+            </div>
           )
         }
       />
@@ -66,6 +74,17 @@ export default function CourtsPage() {
         <img src="/court-map.svg" alt="Bintang court map" className="w-full rounded-xl border border-gray-200" />
       )}
 
+      {showScan && (
+        <BoardScan
+          onDone={() => {
+            setShowScan(false);
+            loadRes();
+            loadCreds();
+          }}
+          onCancel={() => setShowScan(false)}
+        />
+      )}
+
       {showForm && (
         <ReservationForm
           creds={creds}
@@ -75,6 +94,7 @@ export default function CourtsPage() {
             loadCreds();
           }}
           onCancel={() => setShowForm(false)}
+          onCredsChanged={loadCreds}
         />
       )}
 

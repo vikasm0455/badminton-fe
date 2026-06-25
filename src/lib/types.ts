@@ -104,6 +104,30 @@ export interface ReservationView {
   duplicate_warning: boolean;
 }
 
+export interface BoardMatch {
+  credential_id: string;
+  bintang_name: string;
+  already_in_use: boolean;
+  in_use_court: number | null;
+  court_number: number;
+  minutes_left: number | null;
+  location: "current" | "queue";
+  queue_position: number | null;
+  current_players: string[];
+  queue: string[];
+  player_count: number;
+  court_type: "full" | "half";
+  start_type: "now" | "at_time";
+  start_in_minutes: number;
+  duration_minutes: number;
+}
+
+export interface BoardScanResult {
+  matches: BoardMatch[];
+  detected_courts: number;
+  message: string;
+}
+
 export interface KcalEntry {
   user_id: string;
   display_name: string;
