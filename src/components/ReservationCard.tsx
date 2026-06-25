@@ -59,7 +59,7 @@ export default function ReservationCard({
           </div>
           <div className="mt-1 text-xs text-muted">
             {r.reserved_by_name}
-            {r.credential_name ? ` · ${r.credential_name}` : ""}
+            {r.attached_logins || r.credential_name ? ` · ${r.attached_logins ?? r.credential_name}` : ""}
             {r.player_count ? ` · ${r.player_count} players` : ""}
           </div>
         </div>

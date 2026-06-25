@@ -88,6 +88,8 @@ export interface ReservationView {
   court_number: number;
   credential_id: string | null;
   credential_name: string | null;
+  /** Comma-joined names of all logins attached to this court (board scan). */
+  attached_logins: string | null;
   reserved_by: string;
   reserved_by_name: string;
   court_type: "full" | "half";
@@ -105,9 +107,11 @@ export interface ReservationView {
 }
 
 export interface BoardMatch {
-  credential_id: string;
-  bintang_name: string;
-  already_in_use: boolean;
+  /** Every matched login on this court (one reservation, one timer). */
+  credential_ids: string[];
+  bintang_names: string[];
+  /** Subset of credential_ids already locked elsewhere — skipped on create. */
+  already_in_use_ids: string[];
   in_use_court: number | null;
   court_number: number;
   minutes_left: number | null;

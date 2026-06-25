@@ -30,7 +30,8 @@ export default function BoardScan({ onDone, onCancel }: { onDone: () => void; on
       const form = new FormData();
       form.append("image", file);
       const res = await api.postForm<BoardScanResult>("/api/reservations/scan-board", form);
-      setRows(res.matches.map((m) => ({ ...m, selected: !m.already_in_use })));
+      // Pre-select a court when at least one of its logins is still attachable.
+      setRows(res.matches.map((m) => ({ ...m, selected: m.already_in_use_ids.length < m.credential_ids.length })));
       setMessage(res.message);
       setMode("review");
       if (res.matches.length === 0) show(res.message, "info");
@@ -53,7 +54,16 @@ export default function BoardScan({ onDone, onCancel }: { onDone: () => void; on
     setBusy(true);
     let ok = 0;
     let fail = 0;
+    let skipped = 0;
     for (const r of chosen) {
+      // Attach every matched login on this court, dropping ones already locked
+      // elsewhere (they can't be re-attached) — one reservation, one timer.
+      const credential_ids = r.credential_ids.filter((id) => !r.already_in_use_ids.includes(id));
+      // All of this court's logins are already in use → nothing to log here.
+      if (credential_ids.length === 0) {
+        skipped++;
+        continue;
+      }
       try {
         const start_at =
           r.start_type === "at_time"
@@ -62,9 +72,7 @@ export default function BoardScan({ onDone, onCancel }: { onDone: () => void; on
         await api.post("/api/reservations", {
           court_number: r.court_number,
           court_type: r.court_type,
-          // A login that's already locked elsewhere can't be re-attached — log the
-          // court without it rather than 409.
-          credential_id: r.already_in_use ? null : r.credential_id,
+          credential_ids,
           player_count: r.player_count,
           duration_minutes: r.duration_minutes,
           start_type: r.start_type,
@@ -78,7 +86,10 @@ export default function BoardScan({ onDone, onCancel }: { onDone: () => void; on
       }
     }
     setBusy(false);
-    show(fail === 0 ? `Logged ${ok} court${ok === 1 ? "" : "s"}` : `Logged ${ok}, ${fail} failed`, fail === 0 ? "ok" : "err");
+    const parts = [`Logged ${ok} court${ok === 1 ? "" : "s"}`];
+    if (fail) parts.push(`${fail} failed`);
+    if (skipped) parts.push(`${skipped} skipped (logins in use)`);
+    show(parts.join(", "), fail === 0 ? "ok" : "err");
     onDone();
   }
 
@@ -145,21 +156,35 @@ export default function BoardScan({ onDone, onCancel }: { onDone: () => void; on
         <div className="flex flex-col gap-2">
           {rows.map((r, i) => (
             <div
-              key={`${r.credential_id}-${r.court_number}`}
+              key={`${r.court_number}-${r.credential_ids[0] ?? i}`}
               className={`rounded-xl border-2 p-3 ${r.selected ? "border-brand bg-brand-light" : "border-gray-200"}`}
             >
               <label className="flex items-center gap-2">
-                <input type="checkbox" checked={r.selected} onChange={(e) => update(i, { selected: e.target.checked })} />
+                <input
+                  type="checkbox"
+                  checked={r.selected}
+                  disabled={r.already_in_use_ids.length >= r.credential_ids.length}
+                  onChange={(e) => update(i, { selected: e.target.checked })}
+                />
                 <span className="font-bold">Court {r.court_number}</span>
                 <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium">
                   {r.location === "current" ? "Playing now" : `Queue #${r.queue_position ?? "?"}`}
                 </span>
-                <span className="ml-auto truncate text-xs text-muted">{r.bintang_name}</span>
+                <span className="ml-auto truncate text-xs text-muted">{r.bintang_names.join(", ")}</span>
               </label>
 
-              {r.already_in_use && (
-                <p className="mt-1 text-xs text-amber-600">Login already on Court {r.in_use_court} — will log without it.</p>
-              )}
+              {r.already_in_use_ids.length > 0 &&
+                (r.already_in_use_ids.length >= r.credential_ids.length ? (
+                  <p className="mt-1 text-xs text-amber-600">
+                    All logins already in use{r.in_use_court ? ` (Court ${r.in_use_court})` : ""} — nothing to log here.
+                  </p>
+                ) : (
+                  <p className="mt-1 text-xs text-amber-600">
+                    {r.already_in_use_ids.length} login{r.already_in_use_ids.length === 1 ? "" : "s"} already in use
+                    {r.in_use_court ? ` (Court ${r.in_use_court})` : ""} — will log without{" "}
+                    {r.already_in_use_ids.length === 1 ? "it" : "them"}.
+                  </p>
+                ))}
 
               <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
                 <label className="flex items-center gap-1">
