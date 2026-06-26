@@ -23,7 +23,7 @@ jobs:
       # The Dockerfile runs `next build`, so this also fails the job on a
       # broken build — no separate typecheck step needed.
       - name: Build and Push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: true
