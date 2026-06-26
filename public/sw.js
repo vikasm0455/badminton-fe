@@ -1,5 +1,8 @@
 /* RallyUp Service Worker — push, notification routing, offline shell (PRD §16.2) */
-const CACHE = "rallyup-shell-v1";
+// Stamped per deploy (sed in Dockerfile) so the browser detects a new worker and
+// updates automatically. Falls back to a constant string in local dev.
+const VERSION = "__BUILD_ID__";
+const CACHE = "rallyup-" + VERSION;
 const SHELL = ["/", "/home", "/offline", "/manifest.json", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", (event) => {
@@ -17,8 +20,9 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-// App shell: cache-first for static GETs; network-first for navigations with an
-// offline fallback. API calls always go to the network (never cached).
+// Navigations: network-first (always fresh HTML when online) with an offline
+// fallback. Static GETs: stale-while-revalidate so assets refresh in the
+// background. API calls always go to the network (never cached).
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;
@@ -39,8 +43,24 @@ self.addEventListener("fetch", (event) => {
   }
 
   event.respondWith(
-    caches.match(request).then((cached) => cached || fetch(request).catch(() => cached))
+    caches.match(request).then((cached) => {
+      const fresh = fetch(request)
+        .then((resp) => {
+          if (resp && resp.ok) {
+            const copy = resp.clone();
+            caches.open(CACHE).then((c) => c.put(request, copy)).catch(() => {});
+          }
+          return resp;
+        })
+        .catch(() => cached);
+      return cached || fresh;
+    })
   );
+});
+
+// Let the page trigger immediate activation of a waiting worker.
+self.addEventListener("message", (event) => {
+  if (event.data === "SKIP_WAITING") self.skipWaiting();
 });
 
 // Push: show an OS notification. Suppressed when the app is already focused

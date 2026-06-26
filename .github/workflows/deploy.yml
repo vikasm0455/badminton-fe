@@ -29,6 +29,7 @@ jobs:
           push: true
           build-args: |
             API_PROXY=http://badminton-be-rust:8090
+            BUILD_ID=${{ github.sha }}
           tags: ${{ secrets.DOCKER_USERNAME }}/badminton-fe:latest
           no-cache: true
           provenance: false

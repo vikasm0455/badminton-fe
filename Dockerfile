@@ -9,8 +9,11 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 ARG API_PROXY=http://badminton-be-rust:8090
 ENV API_PROXY=$API_PROXY
+# Unique per deploy so the service worker's bytes change → browsers auto-update.
+ARG BUILD_ID=dev
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+RUN sed -i "s/__BUILD_ID__/${BUILD_ID}/g" public/sw.js
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
