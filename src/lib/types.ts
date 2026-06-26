@@ -138,15 +138,8 @@ export interface BoardScanResult {
   message: string;
 }
 
-export interface KcalEntry {
-  user_id: string;
-  display_name: string;
-  kcal: number;
-}
-
 export interface KcalToday {
-  entries: KcalEntry[];
-  total: number;
+  // Private to each member — only the caller's own log.
   my_log: { kcal: number; note: string | null } | null;
 }
 
@@ -180,8 +173,6 @@ export interface MemberDetail {
   member: MemberRow;
   total_votes: number;
   total_attendance: number;
-  kcal_sessions: number;
-  kcal_avg: number;
 }
 
 export interface InviteRow {

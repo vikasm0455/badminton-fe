@@ -128,17 +128,11 @@ export default function HomePage() {
           </Link>
         </div>
         <Card>
-          {kcal && kcal.entries.length > 0 ? (
-            <>
-              <p className="mb-2 text-lg font-bold">Team burned {kcal.total.toLocaleString()} kcal</p>
-              <div className="flex flex-wrap gap-1.5">
-                {kcal.entries.map((e) => (
-                  <span key={e.user_id} className="rounded-full bg-brand-light px-2 py-0.5 text-xs text-brand-dark">
-                    {e.display_name} {e.kcal}
-                  </span>
-                ))}
-              </div>
-            </>
+          {kcal?.my_log ? (
+            <div className="flex items-baseline justify-between">
+              <span className="text-2xl font-extrabold tabular-nums">{kcal.my_log.kcal.toLocaleString()}</span>
+              <span className="text-sm text-muted">kcal today · 🔒 private</span>
+            </div>
           ) : (
             <EmptyState text="No kcal logged yet today." />
           )}

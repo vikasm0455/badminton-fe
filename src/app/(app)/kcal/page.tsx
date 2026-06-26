@@ -87,19 +87,15 @@ export default function KcalPage() {
       <section className="flex flex-col gap-2">
         <h2 className="text-sm font-bold uppercase tracking-wide text-muted">Today&apos;s burn 🔥</h2>
         <Card>
-          {today && today.entries.length > 0 ? (
-            <>
-              <p className="mb-2 text-lg font-bold">Team burned {today.total.toLocaleString()} kcal</p>
-              {today.entries.map((e) => (
-                <div key={e.user_id} className="flex justify-between border-b border-gray-100 py-1.5 text-sm last:border-0">
-                  <span>{e.display_name}</span>
-                  <span className="font-semibold tabular-nums">{e.kcal} kcal</span>
-                </div>
-              ))}
-            </>
+          {today?.my_log ? (
+            <div className="flex items-baseline justify-between">
+              <span className="text-3xl font-extrabold tabular-nums">{today.my_log.kcal.toLocaleString()}</span>
+              <span className="text-sm text-muted">kcal today</span>
+            </div>
           ) : (
             <EmptyState text="No kcal logged yet today." />
           )}
+          <p className="mt-2 text-xs text-muted">🔒 Private to you — calorie logs are never shared with the group.</p>
         </Card>
       </section>
 
