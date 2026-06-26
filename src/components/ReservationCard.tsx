@@ -4,6 +4,7 @@ import { api, ApiError } from "@/lib/api";
 import type { ReservationView } from "@/lib/types";
 import { Badge, Button, Card, useToast } from "./ui";
 import Timer from "./Timer";
+import EditReservation from "./EditReservation";
 
 export default function ReservationCard({
   r,
@@ -16,6 +17,7 @@ export default function ReservationCard({
 }) {
   const { show } = useToast();
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   async function complete() {
     if (busy) return;
@@ -81,18 +83,31 @@ export default function ReservationCard({
         <p className="mt-2 text-xs text-muted">Completed by {r.completed_by_name}</p>
       )}
 
-      {!done && (
-        <div className="mt-3 flex gap-2">
-          <Button variant="secondary" className="flex-1 py-2 text-sm" loading={busy} onClick={complete}>
-            Mark complete
-          </Button>
-          {isAdmin && (
-            <Button variant="ghost" className="py-2 text-sm text-pass" onClick={cancel}>
-              Cancel
+      {!done &&
+        (editing ? (
+          <EditReservation
+            r={r}
+            onSaved={() => {
+              setEditing(false);
+              onChange();
+            }}
+            onCancel={() => setEditing(false)}
+          />
+        ) : (
+          <div className="mt-3 flex gap-2">
+            <Button variant="secondary" className="flex-1 py-2 text-sm" loading={busy} onClick={complete}>
+              Mark complete
             </Button>
-          )}
-        </div>
-      )}
+            <Button variant="ghost" className="py-2 text-sm" onClick={() => setEditing(true)}>
+              Edit
+            </Button>
+            {isAdmin && (
+              <Button variant="ghost" className="py-2 text-sm text-pass" onClick={cancel}>
+                Cancel
+              </Button>
+            )}
+          </div>
+        ))}
     </Card>
   );
 }
