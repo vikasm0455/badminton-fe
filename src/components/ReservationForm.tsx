@@ -5,6 +5,13 @@ import type { CredentialView } from "@/lib/types";
 import { Button, Card, Field, TextInput, useToast } from "./ui";
 import PostCredential from "./PostCredential";
 
+/** Parse a free-typed numeric field, clamping to [lo, hi] and falling back to
+ *  dflt when empty/invalid. Lets the input be cleared while editing. */
+const clampNum = (s: string, lo: number, hi: number, dflt: number) => {
+  const n = parseInt(s, 10);
+  return Number.isNaN(n) ? dflt : Math.min(hi, Math.max(lo, n));
+};
+
 export default function ReservationForm({
   creds,
   onCreated,
@@ -18,12 +25,12 @@ export default function ReservationForm({
   onCredsChanged?: () => void;
 }) {
   const { show } = useToast();
-  const [court, setCourt] = useState(1);
+  const [court, setCourt] = useState("1");
   const [courtType, setCourtType] = useState<"full" | "half">("full");
   const [credId, setCredId] = useState<string>("");
   const [showAddLogin, setShowAddLogin] = useState(false);
-  const [players, setPlayers] = useState(4);
-  const [duration, setDuration] = useState(45);
+  const [players, setPlayers] = useState("4");
+  const [duration, setDuration] = useState("45");
   const [startType, setStartType] = useState<"now" | "at_time">("now");
   const [startTime, setStartTime] = useState("");
   const [queue, setQueue] = useState(0);
@@ -42,18 +49,21 @@ export default function ReservationForm({
         d.setHours(h, m, 0, 0);
         startAt = d.toISOString();
       }
+      const courtNum = clampNum(court, 1, 53, 1);
+      const playerNum = clampNum(players, 1, 8, 4);
+      const durationNum = clampNum(duration, 1, 45, 45);
       await api.post("/api/reservations", {
-        court_number: court,
+        court_number: courtNum,
         court_type: courtType,
         credential_id: credId || null,
-        player_count: players,
-        duration_minutes: duration,
+        player_count: playerNum,
+        duration_minutes: durationNum,
         start_type: startType,
         start_at: startAt,
         queue_number: queue || null,
         notes: notes.trim() || null,
       });
-      show(`Court ${court} logged`, "ok");
+      show(`Court ${courtNum} logged`, "ok");
       onCreated();
     } catch (e) {
       show(e instanceof ApiError ? e.message : "Could not log reservation", "err");
@@ -78,18 +88,20 @@ export default function ReservationForm({
       <form onSubmit={submit} className="flex flex-col gap-4">
         <Field label="Court number (1–53)">
           <div className="flex items-center gap-3">
-            <button type="button" className="rounded-xl bg-gray-100 px-4 text-2xl" onClick={() => setCourt((c) => Math.max(1, c - 1))}>
+            <button type="button" className="rounded-xl bg-gray-100 px-4 text-2xl" onClick={() => setCourt((c) => String(Math.max(1, clampNum(c, 1, 53, 1) - 1)))}>
               −
             </button>
             <TextInput
               type="number"
+              inputMode="numeric"
               min={1}
               max={53}
               value={court}
-              onChange={(e) => setCourt(Math.min(53, Math.max(1, Number(e.target.value) || 1)))}
+              onChange={(e) => setCourt(e.target.value)}
+              onBlur={() => setCourt((c) => String(clampNum(c, 1, 53, 1)))}
               className="text-center text-xl font-bold"
             />
-            <button type="button" className="rounded-xl bg-gray-100 px-4 text-2xl" onClick={() => setCourt((c) => Math.min(53, c + 1))}>
+            <button type="button" className="rounded-xl bg-gray-100 px-4 text-2xl" onClick={() => setCourt((c) => String(Math.min(53, clampNum(c, 1, 53, 1) + 1)))}>
               +
             </button>
           </div>
@@ -157,10 +169,26 @@ export default function ReservationForm({
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="Players">
-            <TextInput type="number" min={1} max={8} value={players} onChange={(e) => setPlayers(Number(e.target.value) || 1)} />
+            <TextInput
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={8}
+              value={players}
+              onChange={(e) => setPlayers(e.target.value)}
+              onBlur={() => setPlayers((p) => String(clampNum(p, 1, 8, 4)))}
+            />
           </Field>
           <Field label="Minutes (≤45)">
-            <TextInput type="number" min={1} max={45} value={duration} onChange={(e) => setDuration(Math.min(45, Math.max(1, Number(e.target.value) || 1)))} />
+            <TextInput
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={45}
+              value={duration}
+              onChange={(e) => setDuration(e.target.value)}
+              onBlur={() => setDuration((d) => String(clampNum(d, 1, 45, 45)))}
+            />
           </Field>
         </div>
 

@@ -65,16 +65,18 @@ export default function BoardScan({ onDone, onCancel }: { onDone: () => void; on
         continue;
       }
       try {
+        const dur = Math.min(45, Math.max(1, r.duration_minutes || 45));
+        const startMin = Math.min(170, Math.max(2, r.start_in_minutes || 15));
         const start_at =
           r.start_type === "at_time"
-            ? new Date(serverNow() + r.start_in_minutes * 60000).toISOString()
+            ? new Date(serverNow() + startMin * 60000).toISOString()
             : undefined;
         await api.post("/api/reservations", {
           court_number: r.court_number,
           court_type: r.court_type,
           credential_ids,
           player_count: r.player_count,
-          duration_minutes: r.duration_minutes,
+          duration_minutes: dur,
           start_type: r.start_type,
           start_at,
           queue_number: r.location === "queue" ? Math.min(5, r.queue_position ?? 1) : null,
@@ -191,10 +193,14 @@ export default function BoardScan({ onDone, onCancel }: { onDone: () => void; on
                   <span className="text-xs text-muted">{r.start_type === "now" ? "Ends in" : "Plays for"}</span>
                   <input
                     type="number"
+                    inputMode="numeric"
                     min={1}
                     max={45}
-                    value={r.duration_minutes}
-                    onChange={(e) => update(i, { duration_minutes: Math.min(45, Math.max(1, Number(e.target.value) || 1)) })}
+                    value={r.duration_minutes || ""}
+                    onChange={(e) =>
+                      update(i, { duration_minutes: e.target.value === "" ? 0 : Math.min(45, Math.max(0, Number(e.target.value) || 0)) })
+                    }
+                    onBlur={(e) => e.target.value === "" && update(i, { duration_minutes: 45 })}
                     className="w-14 rounded border border-gray-300 px-2 py-1 text-center"
                   />
                   <span className="text-xs">min</span>
@@ -205,10 +211,14 @@ export default function BoardScan({ onDone, onCancel }: { onDone: () => void; on
                     <span className="text-xs text-muted">Starts in</span>
                     <input
                       type="number"
+                      inputMode="numeric"
                       min={2}
                       max={170}
-                      value={r.start_in_minutes}
-                      onChange={(e) => update(i, { start_in_minutes: Math.min(170, Math.max(2, Number(e.target.value) || 2)) })}
+                      value={r.start_in_minutes || ""}
+                      onChange={(e) =>
+                        update(i, { start_in_minutes: e.target.value === "" ? 0 : Math.min(170, Math.max(0, Number(e.target.value) || 0)) })
+                      }
+                      onBlur={(e) => e.target.value === "" && update(i, { start_in_minutes: 15 })}
                       className="w-14 rounded border border-gray-300 px-2 py-1 text-center"
                     />
                     <span className="text-xs">min</span>
