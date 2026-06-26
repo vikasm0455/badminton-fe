@@ -105,7 +105,18 @@ export default function CourtsPage() {
             <EmptyState icon="🏸" text="No active courts. Tap “Log court” after you reserve at the kiosk." />
           </Card>
         ) : (
-          active.map((r) => <ReservationCard key={r.id} r={r} isAdmin={user?.is_admin} onChange={loadRes} />)
+          active.map((r) => (
+            <ReservationCard
+              key={r.id}
+              r={r}
+              isAdmin={user?.is_admin}
+              creds={creds}
+              onChange={() => {
+                loadRes();
+                loadCreds();
+              }}
+            />
+          ))
         )}
       </section>
 

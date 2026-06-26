@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { api, ApiError } from "@/lib/api";
-import type { ReservationView } from "@/lib/types";
+import type { CredentialView, ReservationView } from "@/lib/types";
 import { Badge, Button, Card, useToast } from "./ui";
 import Timer from "./Timer";
 import EditReservation from "./EditReservation";
@@ -9,10 +9,12 @@ import EditReservation from "./EditReservation";
 export default function ReservationCard({
   r,
   isAdmin,
+  creds = [],
   onChange,
 }: {
   r: ReservationView;
   isAdmin?: boolean;
+  creds?: CredentialView[];
   onChange: () => void;
 }) {
   const { show } = useToast();
@@ -87,6 +89,7 @@ export default function ReservationCard({
         (editing ? (
           <EditReservation
             r={r}
+            creds={creds}
             onSaved={() => {
               setEditing(false);
               onChange();

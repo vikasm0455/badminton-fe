@@ -94,6 +94,8 @@ export interface ReservationView {
   credential_name: string | null;
   /** Comma-joined names of all logins attached to this court (board scan). */
   attached_logins: string | null;
+  /** IDs of all logins attached to this court (for the edit form). */
+  attached_credential_ids: string[];
   reserved_by: string;
   reserved_by_name: string;
   court_type: "full" | "half";

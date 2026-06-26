@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { api, ApiError } from "@/lib/api";
-import type { ReservationView } from "@/lib/types";
+import type { CredentialView, ReservationView } from "@/lib/types";
 import { Button, Field, TextInput, useToast } from "./ui";
 
 const clampNum = (s: string, lo: number, hi: number, dflt: number) => {
@@ -9,14 +9,16 @@ const clampNum = (s: string, lo: number, hi: number, dflt: number) => {
   return Number.isNaN(n) ? dflt : Math.min(hi, Math.max(lo, n));
 };
 
-/** Inline editor for a logged court. Pre-filled with the reservation's current
- *  values; PUTs only the court details (logins aren't changed here). */
+/** Inline editor for a logged court — court details plus the attached members
+ *  (logins). Pre-filled with the reservation's current values. */
 export default function EditReservation({
   r,
+  creds = [],
   onSaved,
   onCancel,
 }: {
   r: ReservationView;
+  creds?: CredentialView[];
   onSaved: () => void;
   onCancel: () => void;
 }) {
@@ -27,7 +29,12 @@ export default function EditReservation({
   const [duration, setDuration] = useState(String(r.duration_minutes));
   const [queue, setQueue] = useState(r.queue_number ?? 0);
   const [notes, setNotes] = useState(r.notes ?? "");
+  const [credIds, setCredIds] = useState<string[]>(r.attached_credential_ids ?? []);
   const [busy, setBusy] = useState(false);
+
+  function toggleCred(id: string, on: boolean) {
+    setCredIds((ids) => (on ? [...new Set([...ids, id])] : ids.filter((x) => x !== id)));
+  }
 
   async function save() {
     setBusy(true);
@@ -39,6 +46,7 @@ export default function EditReservation({
         duration_minutes: clampNum(duration, 1, 180, r.duration_minutes),
         queue_number: queue || null,
         notes: notes.trim() || null,
+        credential_ids: credIds,
       });
       show("Court updated", "ok");
       onSaved();
@@ -119,6 +127,37 @@ export default function EditReservation({
             </button>
           ))}
         </div>
+      </Field>
+
+      <Field label="Members (logins on this court)">
+        {creds.length === 0 ? (
+          <p className="text-sm text-muted">No logins posted today.</p>
+        ) : (
+          <div className="flex flex-col divide-y divide-gray-100 rounded-xl border border-gray-200">
+            {creds.map((c) => {
+              const checked = credIds.includes(c.id);
+              const lockedElsewhere = c.in_use && !checked;
+              return (
+                <label
+                  key={c.id}
+                  className={`flex items-center gap-2 px-3 py-2.5 ${lockedElsewhere ? "opacity-50" : "active:bg-gray-50"}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    disabled={lockedElsewhere}
+                    onChange={(e) => toggleCred(c.id, e.target.checked)}
+                  />
+                  <span className="font-medium">{c.bintang_name}</span>
+                  {lockedElsewhere && (
+                    <span className="ml-auto text-xs text-amber-600">in use · Court {c.in_use_court}</span>
+                  )}
+                </label>
+              );
+            })}
+          </div>
+        )}
+        <p className="mt-1 text-xs text-muted">{credIds.length} selected</p>
       </Field>
 
       <Field label="Notes (optional)">
