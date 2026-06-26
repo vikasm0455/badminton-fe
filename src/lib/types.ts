@@ -75,9 +75,13 @@ export interface CredentialView {
   clears_at: string;
 }
 
-export interface OcrResult {
+export interface OcrLogin {
   bintang_name: string;
   bintang_password: string;
+}
+
+export interface OcrResult {
+  logins: OcrLogin[];
   ok: boolean;
   screenshot_path: string | null;
   message: string;

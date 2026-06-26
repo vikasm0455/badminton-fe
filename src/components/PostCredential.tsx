@@ -6,12 +6,14 @@ import { Button, Card, Field, Spinner, TextInput, useToast } from "./ui";
 import CaptureButtons from "./CaptureButtons";
 
 type Mode = "choose" | "reading" | "confirm";
+type Row = { id: string; name: string; password: string };
+
+const blankRow = (): Row => ({ id: crypto.randomUUID(), name: "", password: "" });
 
 export default function PostCredential({ onPosted }: { onPosted: (cred: CredentialView) => void }) {
   const { show } = useToast();
   const [mode, setMode] = useState<Mode>("choose");
-  const [name, setName] = useState("");
-  const [password, setPassword] = useState("");
+  const [rows, setRows] = useState<Row[]>([]);
   const [shotPath, setShotPath] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -27,43 +29,66 @@ export default function PostCredential({ onPosted }: { onPosted: (cred: Credenti
       const form = new FormData();
       form.append("image", file);
       const res = await api.postForm<OcrResult>("/api/credentials/ocr", form);
-      setName(res.bintang_name);
-      setPassword(res.bintang_password);
+      setRows(
+        res.logins.length > 0
+          ? res.logins.map((l) => ({ id: crypto.randomUUID(), name: l.bintang_name, password: l.bintang_password }))
+          : [blankRow()]
+      );
       setShotPath(res.screenshot_path);
       show(res.message, res.ok ? "ok" : "info");
       setMode("confirm");
     } catch (err) {
+      setRows([blankRow()]);
+      setShotPath(null);
       show(err instanceof ApiError ? err.message : "Auto-read unavailable — enter manually.", "err");
       setMode("confirm");
     }
   }
 
+  function update(id: string, patch: Partial<Row>) {
+    setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  }
+  function removeRow(id: string) {
+    setRows((rs) => (rs.length <= 1 ? rs : rs.filter((r) => r.id !== id)));
+  }
+
   async function post() {
-    if (!name.trim() || !password.trim()) {
+    const valid = rows
+      .map((r) => ({ name: r.name.trim(), password: r.password.trim() }))
+      .filter((r) => r.name && r.password);
+    if (valid.length === 0) {
       show("Name and password are required.", "err");
       return;
     }
     setBusy(true);
-    try {
-      const created = await api.post<CredentialView>("/api/credentials", {
-        bintang_name: name.trim(),
-        bintang_password: password.trim(),
-        screenshot_path: shotPath,
-      });
-      show("Login posted", "ok");
-      reset();
-      onPosted(created);
-    } catch (err) {
-      show(err instanceof ApiError ? err.message : "Could not post", "err");
-    } finally {
-      setBusy(false);
+    let created: CredentialView | null = null;
+    let ok = 0;
+    let fail = 0;
+    for (const r of valid) {
+      try {
+        created = await api.post<CredentialView>("/api/credentials", {
+          bintang_name: r.name,
+          bintang_password: r.password,
+          screenshot_path: shotPath,
+        });
+        ok++;
+      } catch {
+        fail++;
+      }
     }
+    setBusy(false);
+    if (ok === 0) {
+      show("Could not post", "err");
+      return;
+    }
+    show(fail === 0 ? `Posted ${ok} login${ok === 1 ? "" : "s"}` : `Posted ${ok}, ${fail} failed`, fail === 0 ? "ok" : "err");
+    reset();
+    if (created) onPosted(created);
   }
 
   function reset() {
     setMode("choose");
-    setName("");
-    setPassword("");
+    setRows([]);
     setShotPath(null);
   }
 
@@ -72,10 +97,10 @@ export default function PostCredential({ onPosted }: { onPosted: (cred: Credenti
       <Card>
         <p className="mb-1 text-sm font-semibold">Post a court login</p>
         <p className="mb-3 text-xs text-muted">
-          Snap the kiosk screen and we&apos;ll read the name &amp; password — or enter them yourself.
+          Snap the kiosk screen or a note — we&apos;ll read every name &amp; password — or enter them yourself.
         </p>
         <CaptureButtons onFile={onFile} />
-        <Button variant="ghost" className="mt-2 w-full" onClick={() => setMode("confirm")}>
+        <Button variant="ghost" className="mt-2 w-full" onClick={() => { setRows([blankRow()]); setShotPath(null); setMode("confirm"); }}>
           ⌨️ Enter manually
         </Button>
       </Card>
@@ -87,16 +112,18 @@ export default function PostCredential({ onPosted }: { onPosted: (cred: Credenti
       <Card>
         <div className="flex items-center gap-3">
           <Spinner small />
-          <span className="text-sm text-muted">Reading the kiosk screen…</span>
+          <span className="text-sm text-muted">Reading the login(s)…</span>
         </div>
       </Card>
     );
   }
 
+  const fillable = rows.filter((r) => r.name.trim() && r.password.trim()).length || rows.length;
+
   return (
     <Card>
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-base font-bold">Confirm login</h2>
+        <h2 className="text-base font-bold">{rows.length > 1 ? `Confirm ${rows.length} logins` : "Confirm login"}</h2>
         <button
           type="button"
           onClick={reset}
@@ -106,15 +133,49 @@ export default function PostCredential({ onPosted }: { onPosted: (cred: Credenti
           ✕ Back
         </button>
       </div>
+
       <div className="flex flex-col gap-3">
-        <Field label="Name (blue text)">
-          <TextInput value={name} onChange={(e) => setName(e.target.value)} className="text-name font-bold" placeholder="Sharan" />
-        </Field>
-        <Field label="Password (red text)">
-          <TextInput value={password} onChange={(e) => setPassword(e.target.value)} className="text-pass font-bold" placeholder="tiger77" />
-        </Field>
+        {rows.map((r, i) => (
+          <div key={r.id} className={rows.length > 1 ? "rounded-xl border border-gray-200 p-3" : ""}>
+            {rows.length > 1 && (
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-xs font-semibold text-muted">Login {i + 1}</span>
+                <button type="button" onClick={() => removeRow(r.id)} className="text-xs font-medium text-pass">
+                  Remove
+                </button>
+              </div>
+            )}
+            <Field label="Name (blue text)">
+              <TextInput
+                value={r.name}
+                onChange={(e) => update(r.id, { name: e.target.value })}
+                className="text-name font-bold"
+                placeholder="Suchi"
+              />
+            </Field>
+            <div className="mt-2">
+              <Field label="Password (red text)">
+                <TextInput
+                  value={r.password}
+                  onChange={(e) => update(r.id, { password: e.target.value })}
+                  className="text-pass font-bold"
+                  placeholder="lion16"
+                />
+              </Field>
+            </div>
+          </div>
+        ))}
+
+        <button
+          type="button"
+          onClick={() => setRows((rs) => [...rs, blankRow()])}
+          className="text-sm font-medium text-brand-dark"
+        >
+          ＋ Add another login
+        </button>
+
         <Button className="w-full" loading={busy} onClick={post}>
-          Confirm &amp; Post
+          {rows.length > 1 ? `Post ${fillable} logins` : "Confirm & Post"}
         </Button>
       </div>
     </Card>
