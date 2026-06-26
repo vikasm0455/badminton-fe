@@ -27,7 +27,7 @@ export default function ReservationForm({
   const { show } = useToast();
   const [court, setCourt] = useState("1");
   const [courtType, setCourtType] = useState<"full" | "half">("full");
-  const [credId, setCredId] = useState<string>("");
+  const [credIds, setCredIds] = useState<string[]>([]);
   const [showAddLogin, setShowAddLogin] = useState(false);
   const [players, setPlayers] = useState("4");
   const [duration, setDuration] = useState("45");
@@ -36,6 +36,10 @@ export default function ReservationForm({
   const [queue, setQueue] = useState(0);
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
+
+  function toggleCred(id: string, on: boolean) {
+    setCredIds((ids) => (on ? [...new Set([...ids, id])] : ids.filter((x) => x !== id)));
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -55,7 +59,7 @@ export default function ReservationForm({
       await api.post("/api/reservations", {
         court_number: courtNum,
         court_type: courtType,
-        credential_id: credId || null,
+        credential_ids: credIds,
         player_count: playerNum,
         duration_minutes: durationNum,
         start_type: startType,
@@ -124,20 +128,37 @@ export default function ReservationForm({
           </div>
         </Field>
 
-        <Field label="Court login">
-          <select
-            value={credId}
-            onChange={(e) => setCredId(e.target.value)}
-            className="w-full rounded-xl border border-gray-300 bg-white px-3 py-3 text-base"
-          >
-            <option value="">Skip login</option>
-            {creds.map((c) => (
-              <option key={c.id} value={c.id} disabled={c.in_use}>
-                {c.bintang_name}
-                {c.in_use ? ` (in use — Court ${c.in_use_court})` : ""}
-              </option>
-            ))}
-          </select>
+        <Field label="Court logins (pick everyone on this court)">
+          {creds.length === 0 ? (
+            <p className="text-sm text-muted">No logins posted yet — scan or add one below.</p>
+          ) : (
+            <div className="flex flex-col divide-y divide-gray-100 rounded-xl border border-gray-200">
+              {creds.map((c) => {
+                const checked = credIds.includes(c.id);
+                const locked = c.in_use && !checked;
+                return (
+                  <label
+                    key={c.id}
+                    className={`flex items-center gap-2 px-3 py-2.5 ${locked ? "opacity-50" : "active:bg-gray-50"}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={locked}
+                      onChange={(e) => toggleCred(c.id, e.target.checked)}
+                    />
+                    <span className="font-medium">{c.bintang_name}</span>
+                    {c.in_use && (
+                      <span className="ml-auto text-xs text-amber-600">in use · Court {c.in_use_court}</span>
+                    )}
+                  </label>
+                );
+              })}
+            </div>
+          )}
+          {credIds.length > 1 && (
+            <p className="mt-1 text-xs text-muted">{credIds.length} logins on this court.</p>
+          )}
           {!showAddLogin ? (
             <button
               type="button"
@@ -150,7 +171,7 @@ export default function ReservationForm({
             <div className="mt-2">
               <PostCredential
                 onPosted={(c) => {
-                  setCredId(c.id);
+                  setCredIds((ids) => [...new Set([...ids, c.id])]);
                   setShowAddLogin(false);
                   onCredsChanged?.();
                   show(`Login “${c.bintang_name}” added & selected`, "ok");
