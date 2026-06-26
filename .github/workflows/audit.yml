@@ -1,0 +1,23 @@
+name: audit
+on:
+  push:
+    branches: [main]
+    paths: ["package.json", "package-lock.json", ".github/workflows/audit.yml"]
+  pull_request:
+    paths: ["package.json", "package-lock.json"]
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC — catch newly-published advisories
+
+jobs:
+  npm-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      # Gate the build on CRITICAL only. Remaining high/moderate advisories are
+      # Next.js issues fixed solely in a v16 major upgrade and target features
+      # this app doesn't use (next/image, middleware, i18n, CSP nonces). They're
+      # still surfaced as Dependabot alerts/PRs for triage.
+      - run: npm audit --audit-level=critical
