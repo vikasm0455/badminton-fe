@@ -1,4 +1,7 @@
 "use client";
+// LEGACY-SINGLE-TENANT: invite-CODE admin page — replaced by per-group email
+// invites on /groups. Delete with the backend invite-code routes once the groups
+// release is stable. See badminton-be-rust/docs/MIGRATION-0003-groups.md § cleanup.
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import type { InviteRow } from "@/lib/types";

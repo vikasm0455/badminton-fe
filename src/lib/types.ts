@@ -224,6 +224,7 @@ export interface MemberDetail {
   total_attendance: number;
 }
 
+// LEGACY-SINGLE-TENANT: invite-CODE row for the old admin invites page — delete with it.
 export interface InviteRow {
   id: string;
   code: string;

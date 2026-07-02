@@ -1,4 +1,7 @@
 "use client";
+// LEGACY-SINGLE-TENANT: the pending-approval state no longer exists under open
+// signup (accounts are active immediately; groups gate access). Delete this page
+// and the /pending redirects in login + layouts with the backend approve/reject.
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
