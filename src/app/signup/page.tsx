@@ -1,23 +1,23 @@
 "use client";
-import { Suspense, useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import type { LoginResult, VerificationPending } from "@/lib/types";
-import { Button, Card, Field, Spinner, TextInput, useToast } from "@/components/ui";
+import { Button, Card, Field, TextInput, useToast } from "@/components/ui";
 
-function LoginInner() {
+/** Public signup: name + email → OTP → straight in. Access is gated by groups,
+ *  so a fresh account lands on the group onboarding screen. */
+export default function SignupPage() {
   const router = useRouter();
-  const params = useSearchParams();
-  const returnTo = params.get("returnTo");
   const { refresh } = useAuth();
   const { show } = useToast();
 
-  const [step, setStep] = useState<"email" | "otp">("email");
+  const [step, setStep] = useState<"details" | "otp">("details");
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
-  const [pending, setPending] = useState<VerificationPending | null>(null);
   const [resendIn, setResendIn] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -33,8 +33,10 @@ function LoginInner() {
     setError("");
     setBusy(true);
     try {
-      const res = await api.post<VerificationPending>("/api/auth/login", { email: email.trim() });
-      setPending(res);
+      const res = await api.post<VerificationPending>("/api/auth/signup", {
+        display_name: name.trim(),
+        email: email.trim(),
+      });
       setResendIn(Math.max(res.resend_after_secs, 0) || 0);
       setStep("otp");
       if (res.delivery === "server-log") {
@@ -52,21 +54,12 @@ function LoginInner() {
     setError("");
     setBusy(true);
     try {
-      const res = await api.post<LoginResult>("/api/auth/login/verify", {
+      await api.post<LoginResult>("/api/auth/signup/verify", {
         email: email.trim(),
         code: code.trim(),
       });
-      const me = await refresh();
-      if (res.status === "active") {
-        // No group yet → group onboarding; otherwise the requested page.
-        if (me && me.groups_count === 0) {
-          router.replace("/groups");
-        } else {
-          router.replace(returnTo && returnTo.startsWith("/") ? returnTo : "/home");
-        }
-      } else {
-        router.replace("/pending");
-      }
+      await refresh();
+      router.replace("/groups"); // fresh accounts start at group onboarding
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Something went wrong.");
     } finally {
@@ -80,12 +73,24 @@ function LoginInner() {
         <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-3xl bg-brand text-3xl">
           🏸
         </div>
-        <h1 className="text-2xl font-bold text-brand-dark">Welcome back</h1>
+        <h1 className="text-2xl font-bold text-brand-dark">Create your account</h1>
+        <p className="mt-1 text-sm text-muted">Then start a badminton group or join one by invite.</p>
       </div>
 
-      {step === "email" ? (
+      {step === "details" ? (
         <Card>
           <form onSubmit={sendCode} className="flex flex-col gap-4">
+            <Field label="Your name" hint="Shown to your group.">
+              <TextInput
+                autoComplete="name"
+                placeholder="Vikas"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                minLength={2}
+                maxLength={30}
+              />
+            </Field>
             <Field label="Email" hint="We'll send you a 6-digit code.">
               <TextInput
                 type="email"
@@ -123,7 +128,7 @@ function LoginInner() {
             </Field>
             {error && <p className="text-sm text-pass">{error}</p>}
             <Button type="submit" loading={busy} disabled={code.length < 6}>
-              Verify &amp; log in
+              Verify &amp; create account
             </Button>
             <button
               type="button"
@@ -138,22 +143,11 @@ function LoginInner() {
       )}
 
       <p className="text-center text-sm text-muted">
-        New here?{" "}
-        <Link href="/signup" className="font-medium text-brand-dark">
-          Create an account
+        Already have an account?{" "}
+        <Link href="/login" className="font-medium text-brand-dark">
+          Log in
         </Link>
       </p>
-      <Link href="/" className="text-center text-sm text-muted">
-        ← Back
-      </Link>
     </main>
-  );
-}
-
-export default function LoginPage() {
-  return (
-    <Suspense fallback={<div className="flex min-h-dvh items-center justify-center"><Spinner /></div>}>
-      <LoginInner />
-    </Suspense>
   );
 }

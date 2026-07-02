@@ -16,6 +16,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       router.replace(`/login?returnTo=${encodeURIComponent(pathname)}`);
     } else if (user.status !== "active") {
       router.replace("/pending");
+    } else if (user.groups_count === 0 && pathname !== "/groups") {
+      // No group yet → onboarding (create or accept an invite).
+      router.replace("/groups");
     }
   }, [user, loading, router, pathname]);
 

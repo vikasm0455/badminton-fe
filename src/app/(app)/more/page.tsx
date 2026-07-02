@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/auth";
 import { Card, PageHeader } from "@/components/ui";
 
 const ITEMS = [
+  { href: "/groups", label: "My groups", icon: "👥" },
   { href: "/profile", label: "Profile & notifications", icon: "👤" },
   { href: "/history", label: "History", icon: "📅" },
   { href: "/kcal", label: "Calories", icon: "🔥" },

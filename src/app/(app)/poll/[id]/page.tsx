@@ -72,7 +72,7 @@ export default function PollDetailPage() {
   async function deletePoll() {
     if (!confirm("Delete this poll?")) return;
     try {
-      await api.del(`/api/admin/polls/${id}`);
+      await api.del(`/api/polls/${id}`);
       router.replace("/history");
     } catch (e) {
       show(e instanceof ApiError ? e.message : "Could not delete", "err");
@@ -144,14 +144,14 @@ export default function PollDetailPage() {
           </>
         )}
 
-        {poll.attendance_locked && user?.is_admin && (
+        {poll.attendance_locked && user?.active_group_role === "admin" && (
           <Button variant="ghost" className="mt-2 w-full text-sm" onClick={() => confirmAttendance(false)} loading={busy}>
             Unlock attendance (admin)
           </Button>
         )}
       </Card>
 
-      {user?.is_admin && (
+      {user?.active_group_role === "admin" && (
         <Button variant="ghost" className="text-pass" onClick={deletePoll}>
           Delete poll
         </Button>

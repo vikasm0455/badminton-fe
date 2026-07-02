@@ -1,7 +1,8 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
-import type { CredentialView, OcrResult } from "@/lib/types";
+import { useAuth } from "@/lib/auth";
+import type { CredentialView, GroupBrief, OcrResult } from "@/lib/types";
 import { Button, Card, Field, Spinner, TextInput, useToast } from "./ui";
 import CaptureButtons from "./CaptureButtons";
 
@@ -12,10 +13,21 @@ const blankRow = (): Row => ({ id: crypto.randomUUID(), name: "", password: "" }
 
 export default function PostCredential({ onPosted }: { onPosted: (cred: CredentialView) => void }) {
   const { show } = useToast();
+  const { user } = useAuth();
   const [mode, setMode] = useState<Mode>("choose");
   const [rows, setRows] = useState<Row[]>([]);
   const [shotPath, setShotPath] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Which groups the posted login(s) are shared with — defaults to the group
+  // you're playing with. Only shown when the user is in more than one group.
+  const [myGroups, setMyGroups] = useState<GroupBrief[]>([]);
+  const [shareIds, setShareIds] = useState<string[]>(user?.active_group_id ? [user.active_group_id] : []);
+
+  useEffect(() => {
+    if (mode === "confirm" && myGroups.length === 0 && (user?.groups_count ?? 0) > 1) {
+      api.get<GroupBrief[]>("/api/groups").then(setMyGroups).catch(() => {});
+    }
+  }, [mode, myGroups.length, user?.groups_count]);
 
   async function onFile(file: File) {
     // Images are downscaled in CaptureButtons before they reach here; this is
@@ -64,12 +76,14 @@ export default function PostCredential({ onPosted }: { onPosted: (cred: Credenti
     let created: CredentialView | null = null;
     let ok = 0;
     let fail = 0;
+    const group_ids = shareIds.length > 0 ? shareIds : undefined; // default = active group
     for (const r of valid) {
       try {
         created = await api.post<CredentialView>("/api/credentials", {
           bintang_name: r.name,
           bintang_password: r.password,
           screenshot_path: shotPath,
+          group_ids,
         });
         ok++;
       } catch {
@@ -174,7 +188,30 @@ export default function PostCredential({ onPosted }: { onPosted: (cred: Credenti
           ＋ Add another login
         </button>
 
-        <Button className="w-full" loading={busy} onClick={post}>
+        {myGroups.length > 1 && (
+          <div className="rounded-xl border border-gray-200 p-3">
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">Share with</p>
+            <div className="flex flex-col gap-1.5">
+              {myGroups.map((g) => (
+                <label key={g.id} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={shareIds.includes(g.id)}
+                    onChange={(e) =>
+                      setShareIds((ids) =>
+                        e.target.checked ? [...new Set([...ids, g.id])] : ids.filter((x) => x !== g.id)
+                      )
+                    }
+                  />
+                  <span className="font-medium">{g.name}</span>
+                  {g.is_active && <span className="text-xs text-muted">(current)</span>}
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <Button className="w-full" loading={busy} disabled={shareIds.length === 0 && myGroups.length > 1} onClick={post}>
           {rows.length > 1 ? `Post ${fillable} logins` : "Confirm & Post"}
         </Button>
       </div>

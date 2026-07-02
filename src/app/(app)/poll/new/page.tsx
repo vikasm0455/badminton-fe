@@ -53,7 +53,7 @@ export default function NewPollPage() {
             <TextInput
               type="date"
               value={date}
-              min={user?.is_admin ? undefined : todayStr()}
+              min={user?.active_group_role === "admin" ? undefined : todayStr()}
               onChange={(e) => setDate(e.target.value)}
               required
             />
@@ -80,9 +80,9 @@ export default function NewPollPage() {
         </form>
       </Card>
 
-      {user?.is_admin && (
+      {user?.active_group_role === "admin" && (
         <Link
-          href="/admin/data"
+          href="/groups"
           className="flex items-center justify-between rounded-2xl bg-surface px-4 py-3 text-sm shadow-sm ring-1 ring-black/5"
         >
           <span>

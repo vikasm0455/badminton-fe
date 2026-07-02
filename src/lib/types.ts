@@ -7,8 +7,53 @@ export interface MeProfile {
   role: string;
   status: "pending" | "active" | "deactivated" | "rejected";
   created_at: string;
+  /** Site-level operator (security/data pages) — NOT group admin. */
   is_admin: boolean;
   notif_prefs: Record<string, boolean>;
+  /** The group currently scoping the app (null → onboarding). */
+  active_group_id: string | null;
+  active_group_name: string | null;
+  active_group_role: "admin" | "member" | null;
+  groups_count: number;
+}
+
+export interface GroupBrief {
+  id: string;
+  name: string;
+  role: "admin" | "member";
+  member_count: number;
+  is_active: boolean;
+}
+
+export interface GroupMemberRow {
+  id: string;
+  display_name: string;
+  role: "admin" | "member";
+  joined_at: string;
+}
+
+export interface GroupDetail {
+  id: string;
+  name: string;
+  my_role: "admin" | "member";
+  members: GroupMemberRow[];
+}
+
+export interface MyInvite {
+  id: string;
+  group_id: string;
+  group_name: string;
+  invited_by_name: string;
+  member_count: number;
+  created_at: string;
+}
+
+export interface GroupInviteRow {
+  id: string;
+  email: string;
+  invited_by_name: string;
+  created_at: string;
+  expires_at: string;
 }
 
 export interface VerificationPending {
@@ -73,6 +118,10 @@ export interface CredentialView {
   in_use: boolean;
   in_use_court: number | null;
   clears_at: string;
+  /** The caller posted this login (can manage sharing / delete it). */
+  is_mine: boolean;
+  /** Groups this login is shared with — populated only when is_mine. */
+  shared_group_ids: string[];
 }
 
 export interface OcrLogin {

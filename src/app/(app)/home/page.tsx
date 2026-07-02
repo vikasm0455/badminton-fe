@@ -53,7 +53,17 @@ export default function HomePage() {
 
   return (
     <div className="flex flex-col gap-4 px-4 py-4">
-      <PageHeader title={`Hi, ${user?.display_name?.split(" ")[0] ?? "there"} 👋`} />
+      <PageHeader
+        title={`Hi, ${user?.display_name?.split(" ")[0] ?? "there"} 👋`}
+        action={
+          <Link
+            href="/groups"
+            className="max-w-[45vw] truncate rounded-full bg-brand-light px-3 py-1 text-xs font-semibold text-brand-dark"
+          >
+            🏸 {user?.active_group_name ?? "Pick a group"} ▾
+          </Link>
+        }
+      />
 
       {/* Poll */}
       <Card>
@@ -97,7 +107,13 @@ export default function HomePage() {
           </Card>
         ) : (
           activeRes.map((r) => (
-            <ReservationCard key={r.id} r={r} isAdmin={user?.is_admin} onChange={loadRes} />
+            <ReservationCard
+              key={r.id}
+              r={r}
+              isAdmin={user?.active_group_role === "admin"}
+              creds={creds}
+              onChange={loadRes}
+            />
           ))
         )}
       </section>

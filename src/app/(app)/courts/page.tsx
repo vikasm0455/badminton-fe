@@ -109,7 +109,7 @@ export default function CourtsPage() {
             <ReservationCard
               key={r.id}
               r={r}
-              isAdmin={user?.is_admin}
+              isAdmin={user?.active_group_role === "admin"}
               creds={creds}
               onChange={() => {
                 loadRes();
@@ -124,7 +124,7 @@ export default function CourtsPage() {
         <section className="flex flex-col gap-2">
           <h2 className="text-sm font-bold uppercase tracking-wide text-muted">Completed today</h2>
           {doneToday.map((r) => (
-            <ReservationCard key={r.id} r={r} isAdmin={user?.is_admin} onChange={loadRes} />
+            <ReservationCard key={r.id} r={r} isAdmin={user?.active_group_role === "admin"} onChange={loadRes} />
           ))}
         </section>
       )}
