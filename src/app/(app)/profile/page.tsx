@@ -142,6 +142,33 @@ export default function ProfilePage() {
       <Button variant="ghost" className="text-pass" onClick={() => logout().then(() => router.replace("/login"))}>
         Log out
       </Button>
+
+      <Card className="border border-red-100">
+        <h2 className="mb-1 font-semibold text-pass">Danger zone</h2>
+        <p className="mb-3 text-xs text-muted">
+          Deletes your account and personal data (calorie logs, your court logins, notification
+          registrations). Group history you took part in stays, anonymized. This cannot be undone.
+        </p>
+        <Button
+          variant="ghost"
+          className="w-full text-pass"
+          loading={busy}
+          onClick={async () => {
+            if (!confirm("Delete your account? This cannot be undone.")) return;
+            if (!confirm("Last check — your logins and personal data will be permanently deleted. Continue?")) return;
+            setBusy(true);
+            try {
+              await api.del("/api/auth/me");
+              router.replace("/");
+            } catch (e) {
+              show(e instanceof ApiError ? e.message : "Could not delete account", "err");
+              setBusy(false);
+            }
+          }}
+        >
+          Delete my account
+        </Button>
+      </Card>
     </div>
   );
 }
