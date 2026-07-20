@@ -6,14 +6,9 @@ export const metadata: Metadata = {
   description: "The terms for using RallyUp.",
 };
 
-// NOTE (for the owner): fill the placeholders, then this is store-ready at
-// https://badmintonrallyup.com/terms. Apple applies its standard EULA by
-// default, so a Terms page is recommended but optional for the App Store;
-// Google Play does not require one. Consider a lawyer's review before public
-// launch if you want the liability terms to be enforceable in your region.
-const EFFECTIVE_DATE = "[EFFECTIVE DATE — e.g. July 18, 2026]";
-const CONTACT_EMAIL = "[CONTACT EMAIL — e.g. support@badmintonrallyup.com]";
-const JURISDICTION = "[YOUR COUNTRY / STATE]";
+const EFFECTIVE_DATE = "July 19, 2026";
+const CONTACT_EMAIL = "vikasmamidi5@gmail.com";
+const JURISDICTION = "California, USA";
 
 export default function TermsPage() {
   return (

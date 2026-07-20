@@ -6,13 +6,9 @@ export const metadata: Metadata = {
   description: "How RallyUp collects, uses, and protects your information.",
 };
 
-// NOTE (for the owner — delete before publishing if you like):
-// Fill the three placeholders below, then this page is store-ready at
-// https://badmintonrallyup.com/privacy — use that URL in App Store Connect
-// (App Privacy) and Google Play (Data safety + Store listing).
-const EFFECTIVE_DATE = "[EFFECTIVE DATE — e.g. July 18, 2026]";
-const CONTACT_EMAIL = "[CONTACT EMAIL — e.g. support@badmintonrallyup.com]";
-const JURISDICTION = "[YOUR COUNTRY / STATE]";
+const EFFECTIVE_DATE = "July 19, 2026";
+const CONTACT_EMAIL = "vikasmamidi5@gmail.com";
+const JURISDICTION = "California, USA";
 
 export default function PrivacyPage() {
   return (
