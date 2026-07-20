@@ -7,7 +7,7 @@ export const metadata: Metadata = {
 };
 
 const EFFECTIVE_DATE = "July 19, 2026";
-const CONTACT_EMAIL = "vikasmamidi5@gmail.com";
+const CONTACT_EMAIL = "support@badmintonrallyup.com";
 const JURISDICTION = "California, USA";
 
 export default function PrivacyPage() {

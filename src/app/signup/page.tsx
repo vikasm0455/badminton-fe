@@ -83,7 +83,7 @@ export default function SignupPage() {
             <Field label="Your name" hint="Shown to your group.">
               <TextInput
                 autoComplete="name"
-                placeholder="Vikas"
+                placeholder="Alex"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
