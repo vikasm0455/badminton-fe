@@ -106,6 +106,11 @@ export default function SignupPage() {
             <Button type="submit" loading={busy}>
               Send code
             </Button>
+            <p className="text-center text-xs text-muted">
+              By continuing, you agree to our{" "}
+              <Link href="/terms" className="font-medium text-brand-dark underline">Terms</Link> and{" "}
+              <Link href="/privacy" className="font-medium text-brand-dark underline">Privacy Policy</Link>.
+            </p>
           </form>
         </Card>
       ) : (
