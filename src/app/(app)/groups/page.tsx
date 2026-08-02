@@ -221,9 +221,22 @@ export default function GroupsPage() {
                   disabled={!inviteEmail.includes("@")}
                   onClick={() =>
                     run(async () => {
-                      await api.post("/api/groups/invites", { email: inviteEmail.trim() });
+                      // email_delivery: "sent" | "failed" | "skipped" — never
+                      // claim "sent" when the invite email didn't go out.
+                      const r = await api.post<{ email_delivery: string }>(
+                        "/api/groups/invites",
+                        { email: inviteEmail.trim() },
+                      );
                       setInviteEmail("");
-                    }, "Invite sent")
+                      if (r.email_delivery === "sent") {
+                        show(`Invite sent to ${inviteEmail.trim().toLowerCase()}`, "ok");
+                      } else {
+                        show(
+                          "Invite saved, but the email couldn't be sent — they'll see it in RallyUp when they sign up with this address.",
+                          "err",
+                        );
+                      }
+                    })
                   }
                 >
                   Invite
