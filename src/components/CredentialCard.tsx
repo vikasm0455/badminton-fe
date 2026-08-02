@@ -9,10 +9,12 @@ export default function CredentialCard({
   cred,
   isAdmin,
   onDelete,
+  onChanged,
 }: {
   cred: CredentialView;
   isAdmin?: boolean;
   onDelete?: (id: string) => void;
+  onChanged?: () => void;
 }) {
   const { show } = useToast();
   const [, force] = useState(0);
@@ -22,13 +24,34 @@ export default function CredentialCard({
   }, []);
   const [showShot, setShowShot] = useState(false);
   const [showShares, setShowShares] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
+  const [eName, setEName] = useState(cred.bintang_name);
+  const [ePass, setEPass] = useState(cred.bintang_password);
   const [myGroups, setMyGroups] = useState<GroupBrief[] | null>(null);
   const [shareIds, setShareIds] = useState<string[]>(cred.shared_group_ids ?? []);
   const [busy, setBusy] = useState(false);
 
   async function openShares() {
+    setShowEdit(false);
     setShowShares((s) => !s);
     if (!myGroups) setMyGroups(await api.get<GroupBrief[]>("/api/groups").catch(() => []));
+  }
+
+  async function saveEdit() {
+    setBusy(true);
+    try {
+      await api.put(`/api/credentials/${cred.id}`, {
+        bintang_name: eName.trim(),
+        bintang_password: ePass.trim(),
+      });
+      show("Login updated", "ok");
+      setShowEdit(false);
+      onChanged?.();
+    } catch (e) {
+      show(e instanceof ApiError ? e.message : "Could not update login", "err");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function saveShares() {
@@ -70,6 +93,20 @@ export default function CredentialCard({
           </Button>
         )}
         {cred.is_mine && (
+          <Button
+            variant="ghost"
+            className="px-2 py-1 text-sm"
+            onClick={() => {
+              setShowShares(false);
+              setEName(cred.bintang_name);
+              setEPass(cred.bintang_password);
+              setShowEdit((s) => !s);
+            }}
+          >
+            ✎ Edit
+          </Button>
+        )}
+        {cred.is_mine && (
           <Button variant="ghost" className="px-2 py-1 text-sm" onClick={openShares}>
             🔗 Shared with {shareIds.length} group{shareIds.length === 1 ? "" : "s"}
           </Button>
@@ -80,6 +117,36 @@ export default function CredentialCard({
           </Button>
         )}
       </div>
+
+      {showEdit && cred.is_mine && (
+        <div className="mt-2 rounded-xl border border-gray-200 p-3">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">Edit login</p>
+          <div className="flex flex-col gap-2">
+            <input
+              value={eName}
+              onChange={(e) => setEName(e.target.value)}
+              maxLength={50}
+              placeholder="Bintang name"
+              className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
+            />
+            <input
+              value={ePass}
+              onChange={(e) => setEPass(e.target.value)}
+              maxLength={50}
+              placeholder="Password"
+              className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
+            />
+            <Button
+              className="w-full py-2 text-sm"
+              loading={busy}
+              disabled={!eName.trim() || !ePass.trim()}
+              onClick={saveEdit}
+            >
+              Save changes
+            </Button>
+          </div>
+        </div>
+      )}
 
       {showShares && cred.is_mine && (
         <div className="mt-2 rounded-xl border border-gray-200 p-3">

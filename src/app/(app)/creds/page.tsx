@@ -74,7 +74,13 @@ export default function CredsPage() {
             </Card>
           ) : (
             creds.map((c) => (
-              <CredentialCard key={c.id} cred={c} isAdmin={user?.active_group_role === "admin"} onDelete={del} />
+              <CredentialCard
+                key={c.id}
+                cred={c}
+                isAdmin={user?.active_group_role === "admin"}
+                onDelete={del}
+                onChanged={load}
+              />
             ))
           )}
         </>
