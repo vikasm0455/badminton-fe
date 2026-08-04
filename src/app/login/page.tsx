@@ -58,11 +58,16 @@ function LoginInner() {
       });
       const me = await refresh();
       if (res.status === "active") {
-        // No group yet → group onboarding; otherwise the requested page.
-        if (me && me.groups_count === 0) {
+        // A /join/<token> destination wins even with no group yet — that's the
+        // whole point of the invite link. Otherwise: onboarding, then home.
+        if (returnTo && returnTo.startsWith("/join/")) {
+          router.replace(returnTo);
+        } else if (me && me.groups_count === 0) {
           router.replace("/groups");
         } else {
-          router.replace(returnTo && returnTo.startsWith("/") ? returnTo : "/home");
+          // Path-only: "//evil.com" is protocol-relative and must not pass.
+          const safe = returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//");
+          router.replace(safe ? returnTo : "/home");
         }
       } else {
         router.replace("/pending");
@@ -144,7 +149,10 @@ function LoginInner() {
 
       <p className="text-center text-sm text-muted">
         New here?{" "}
-        <Link href="/signup" className="font-medium text-brand-dark">
+        <Link
+          href={returnTo && returnTo.startsWith("/join/") ? `/signup?returnTo=${encodeURIComponent(returnTo)}` : "/signup"}
+          className="font-medium text-brand-dark"
+        >
           Create an account
         </Link>
       </p>

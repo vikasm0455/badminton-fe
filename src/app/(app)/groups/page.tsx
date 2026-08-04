@@ -262,6 +262,8 @@ export default function GroupsPage() {
             </Card>
           )}
 
+          {isGroupAdmin && <InviteLinkCard key={detail.id} />}
+
           {isGroupAdmin && <RenameCard current={detail.name} busy={busy} onSave={(n) => run(() => api.put("/api/groups/current", { name: n }), "Group renamed")} />}
 
           {isGroupAdmin && <AutoPollCard groupId={detail.id} />}
@@ -411,6 +413,129 @@ function RenameCard({ current, busy, onSave }: { current: string; busy: boolean;
           Save
         </Button>
       </div>
+    </Card>
+  );
+}
+
+type InviteLink = { url: string; expires_at: string; join_count: number };
+
+/** Admin-only shareable join link: one active per group, 7-day expiry,
+ *  create doubles as rotate (the old link dies instantly). */
+function InviteLinkCard() {
+  const { show } = useToast();
+  const [link, setLink] = useState<InviteLink | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  // A failed load must NOT render the Create button — Create rotates, and we
+  // can't tell "no link" from "couldn't ask" without this.
+  const [loadFailed, setLoadFailed] = useState(false);
+
+  const [busy, setBusy] = useState(false);
+
+  const loadLink = useCallback(() => {
+    setLoadFailed(false);
+    setLoaded(false);
+    api
+      .get<{ link: InviteLink | null }>("/api/groups/invite-link")
+      .then((r) => setLink(r.link))
+      .catch(() => setLoadFailed(true))
+      .finally(() => setLoaded(true));
+  }, []);
+
+  useEffect(() => {
+    loadLink();
+  }, [loadLink]);
+
+  async function act(fn: () => Promise<void>) {
+    setBusy(true);
+    try {
+      await fn();
+    } catch (e) {
+      show(e instanceof ApiError ? e.message : "Something went wrong", "err");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const create = () =>
+    act(async () => {
+      setLink(await api.post<InviteLink>("/api/groups/invite-link", undefined));
+      show("Invite link ready — share it anywhere", "ok");
+    });
+
+  const disable = () =>
+    act(async () => {
+      await api.del("/api/groups/invite-link");
+      setLink(null);
+      show("Invite link disabled", "ok");
+    });
+
+  const copy = async () => {
+    if (!link) return;
+    await navigator.clipboard.writeText(link.url);
+    show("Link copied", "ok");
+  };
+
+  const shareIt = async () => {
+    if (!link) return;
+    if (navigator.share) {
+      await navigator.share({ url: link.url }).catch(() => undefined);
+    } else {
+      await copy();
+    }
+  };
+
+  const daysLeft = link
+    ? Math.max(1, Math.ceil((Date.parse(link.expires_at) - Date.now()) / 86_400_000))
+    : 0;
+
+  return (
+    <Card>
+      <p className="mb-2 text-sm font-semibold">Invite link</p>
+      {!loaded ? (
+        <Spinner />
+      ) : loadFailed ? (
+        <>
+          <p className="text-sm text-muted">Couldn&apos;t load the invite link.</p>
+          <Button variant="ghost" className="mt-2 py-1.5 text-sm" onClick={loadLink}>
+            Try again
+          </Button>
+        </>
+      ) : !link ? (
+        <>
+          <Button className="w-full py-2 text-sm" loading={busy} onClick={create}>
+            🔗 Create invite link
+          </Button>
+          <p className="mt-2 text-xs text-muted">
+            Anyone with the link can join this group after signing in. It expires after 7 days.
+          </p>
+        </>
+      ) : (
+        <>
+          <div className="break-all rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-xs">
+            {link.url}
+          </div>
+          <p className="mt-2 text-xs text-muted">
+            Expires in {daysLeft} day{daysLeft === 1 ? "" : "s"} · {link.join_count} joined with this
+            link · anyone with it can join after signing in.
+          </p>
+          <div className="mt-2 flex gap-2">
+            <Button className="flex-1 py-1.5 text-sm" onClick={shareIt}>
+              Share
+            </Button>
+            <Button variant="ghost" className="flex-1 py-1.5 text-sm" onClick={copy}>
+              Copy
+            </Button>
+          </div>
+          <div className="mt-2 flex gap-2">
+            <Button variant="ghost" className="flex-1 py-1.5 text-sm" loading={busy} onClick={create}>
+              New link
+            </Button>
+            <Button variant="ghost" className="flex-1 py-1.5 text-sm text-pass" loading={busy} onClick={disable}>
+              Disable
+            </Button>
+          </div>
+        </>
+      )}
     </Card>
   );
 }

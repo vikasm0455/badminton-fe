@@ -1,16 +1,18 @@
 "use client";
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import type { LoginResult, VerificationPending } from "@/lib/types";
-import { Button, Card, Field, TextInput, useToast } from "@/components/ui";
+import { Button, Card, Field, Spinner, TextInput, useToast } from "@/components/ui";
 
 /** Public signup: name + email → OTP → straight in. Access is gated by groups,
- *  so a fresh account lands on the group onboarding screen. */
-export default function SignupPage() {
+ *  so a fresh account lands on the group onboarding screen (or back on the
+ *  invite-link join page that sent them here). */
+function SignupInner() {
   const router = useRouter();
+  const returnTo = useSearchParams().get("returnTo");
   const { refresh } = useAuth();
   const { show } = useToast();
 
@@ -59,7 +61,12 @@ export default function SignupPage() {
         code: code.trim(),
       });
       await refresh();
-      router.replace("/groups"); // fresh accounts start at group onboarding
+      // A /join/<token> destination wins — the invite link brought them here.
+      if (returnTo && returnTo.startsWith("/join/")) {
+        router.replace(returnTo);
+      } else {
+        router.replace("/groups"); // fresh accounts start at group onboarding
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Something went wrong.");
     } finally {
@@ -149,10 +156,21 @@ export default function SignupPage() {
 
       <p className="text-center text-sm text-muted">
         Already have an account?{" "}
-        <Link href="/login" className="font-medium text-brand-dark">
+        <Link
+          href={returnTo && returnTo.startsWith("/join/") ? `/login?returnTo=${encodeURIComponent(returnTo)}` : "/login"}
+          className="font-medium text-brand-dark"
+        >
           Log in
         </Link>
       </p>
     </main>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-dvh items-center justify-center"><Spinner /></div>}>
+      <SignupInner />
+    </Suspense>
   );
 }
