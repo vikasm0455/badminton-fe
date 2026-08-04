@@ -6,7 +6,7 @@ import AppBootstrap from "@/components/AppBootstrap";
 
 export const metadata: Metadata = {
   title: "RallyUp",
-  description: "Coordinate daily badminton sessions at Bintang Badminton.",
+  description: "Your badminton crew, organized — tonight's polls, live court timers, and shared court logins.",
   manifest: "/manifest.json",
   appleWebApp: { capable: true, statusBarStyle: "default", title: "RallyUp" },
   icons: { apple: "/apple-touch-icon.png", icon: "/icon-192.png" },

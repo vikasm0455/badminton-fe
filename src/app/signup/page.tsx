@@ -61,8 +61,8 @@ function SignupInner() {
         code: code.trim(),
       });
       await refresh();
-      // A /join/<token> destination wins — the invite link brought them here.
-      if (returnTo && returnTo.startsWith("/join/")) {
+      // A /join/ or /p/ destination wins — the shared link brought them here.
+      if (returnTo && (returnTo.startsWith("/join/") || returnTo.startsWith("/p/"))) {
         router.replace(returnTo);
       } else {
         router.replace("/groups"); // fresh accounts start at group onboarding
@@ -157,7 +157,11 @@ function SignupInner() {
       <p className="text-center text-sm text-muted">
         Already have an account?{" "}
         <Link
-          href={returnTo && returnTo.startsWith("/join/") ? `/login?returnTo=${encodeURIComponent(returnTo)}` : "/login"}
+          href={
+            returnTo && (returnTo.startsWith("/join/") || returnTo.startsWith("/p/"))
+              ? `/login?returnTo=${encodeURIComponent(returnTo)}`
+              : "/login"
+          }
           className="font-medium text-brand-dark"
         >
           Log in

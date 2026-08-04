@@ -95,7 +95,28 @@ export default function PollDetailPage() {
   return (
     <div className="flex flex-col gap-4 px-4 py-4">
       <PageHeader title={fmtDate(poll.game_date)} />
-      <p className="-mt-2 text-sm text-muted">Created by {poll.created_by_name}</p>
+      <div className="-mt-2 flex items-center justify-between">
+        <p className="text-sm text-muted">Created by {poll.created_by_name}</p>
+        <button
+          type="button"
+          className="text-sm font-medium text-brand-dark"
+          onClick={async () => {
+            try {
+              const r = await api.post<{ url: string }>(`/api/polls/${id}/share-link`, undefined);
+              if (navigator.share) {
+                await navigator.share({ url: r.url }).catch(() => undefined);
+              } else {
+                await navigator.clipboard.writeText(r.url);
+                show("Poll link copied — paste it in the group chat", "ok");
+              }
+            } catch (e) {
+              show(e instanceof ApiError ? e.message : "Could not create the link", "err");
+            }
+          }}
+        >
+          ⇪ Share poll
+        </button>
+      </div>
 
       <Card>
         <PollVote poll={poll} onChange={setPoll} />

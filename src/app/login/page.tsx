@@ -58,9 +58,9 @@ function LoginInner() {
       });
       const me = await refresh();
       if (res.status === "active") {
-        // A /join/<token> destination wins even with no group yet — that's the
-        // whole point of the invite link. Otherwise: onboarding, then home.
-        if (returnTo && returnTo.startsWith("/join/")) {
+        // A /join/<token> or /p/<token> destination wins even with no group
+        // yet — the shared link is why they signed in. Else: onboarding, home.
+        if (returnTo && (returnTo.startsWith("/join/") || returnTo.startsWith("/p/"))) {
           router.replace(returnTo);
         } else if (me && me.groups_count === 0) {
           router.replace("/groups");
@@ -150,7 +150,11 @@ function LoginInner() {
       <p className="text-center text-sm text-muted">
         New here?{" "}
         <Link
-          href={returnTo && returnTo.startsWith("/join/") ? `/signup?returnTo=${encodeURIComponent(returnTo)}` : "/signup"}
+          href={
+            returnTo && (returnTo.startsWith("/join/") || returnTo.startsWith("/p/"))
+              ? `/signup?returnTo=${encodeURIComponent(returnTo)}`
+              : "/signup"
+          }
           className="font-medium text-brand-dark"
         >
           Create an account
