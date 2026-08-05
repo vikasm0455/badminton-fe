@@ -47,26 +47,40 @@ function minutesDelta(now: number, before: number): string {
 export default function StatsPage() {
   const [stats, setStats] = useState<MyStats | null>(null);
   const [failed, setFailed] = useState(false);
+  // months: 1/3/6 presets; 0 = custom weeks.
   const [months, setMonths] = useState(1);
+  const [weeks, setWeeks] = useState(8);
 
   // Restore the remembered range once, client-side.
   useEffect(() => {
-    const saved = Number(window.localStorage.getItem("statsMonths"));
-    if (saved === 3 || saved === 6) setMonths(saved);
+    const savedM = Number(window.localStorage.getItem("statsMonths"));
+    if (savedM === 0 || savedM === 3 || savedM === 6) setMonths(savedM);
+    const savedW = Number(window.localStorage.getItem("statsWeeks"));
+    if (savedW >= 1 && savedW <= 26) setWeeks(savedW);
   }, []);
 
   useEffect(() => {
+    const query = months === 0 ? `weeks=${weeks}` : `months=${months}`;
     api
-      .get<MyStats>(`/api/stats/me?months=${months}`)
+      .get<MyStats>(`/api/stats/me?${query}`)
       .then(setStats)
       .catch(() => setFailed(true));
-  }, [months]);
+  }, [months, weeks]);
 
   const pickRange = (m: number) => {
     setMonths(m);
     window.localStorage.setItem("statsMonths", String(m));
   };
-  const rangeLabel = months === 1 ? "last 5 weeks" : `last ${months} months`;
+  const pickWeeks = (w: number) => {
+    setWeeks(w);
+    window.localStorage.setItem("statsWeeks", String(w));
+  };
+  const rangeLabel =
+    months === 0
+      ? `last ${weeks} week${weeks === 1 ? "" : "s"}`
+      : months === 1
+        ? "last 5 weeks"
+        : `last ${months} months`;
 
   if (failed) {
     return <p className="px-4 py-8 text-center text-sm text-muted">Couldn&apos;t load your stats — pull to refresh.</p>;
@@ -113,7 +127,7 @@ export default function StatsPage() {
       </p>
 
       <div className="flex rounded-xl bg-gray-100 p-1 text-sm font-medium">
-        {[1, 3, 6].map((m) => (
+        {[1, 3, 6, 0].map((m) => (
           <button
             key={m}
             type="button"
@@ -122,10 +136,25 @@ export default function StatsPage() {
               months === m ? "bg-surface text-ink shadow-sm" : "text-muted"
             }`}
           >
-            {m}M
+            {m === 0 ? "Custom" : `${m}M`}
           </button>
         ))}
       </div>
+      {months === 0 && (
+        <div className="flex items-center gap-3 rounded-xl border border-gray-200 bg-surface px-3 py-2">
+          <input
+            type="range"
+            min={1}
+            max={26}
+            value={weeks}
+            onChange={(e) => pickWeeks(Number(e.target.value))}
+            className="flex-1 accent-brand"
+          />
+          <span className="w-20 text-right text-sm font-semibold tabular-nums">
+            {weeks} week{weeks === 1 ? "" : "s"}
+          </span>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-2">
         {tiles.map((t) => (
