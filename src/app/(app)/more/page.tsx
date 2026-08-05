@@ -8,6 +8,7 @@ const ITEMS = [
   { href: "/groups", label: "My groups", icon: "👥" },
   { href: "/profile", label: "Profile & notifications", icon: "👤" },
   { href: "/history", label: "History", icon: "📅" },
+  { href: "/stats", label: "My stats", icon: "📊" },
   { href: "/kcal", label: "Calories", icon: "🔥" },
 ];
 
