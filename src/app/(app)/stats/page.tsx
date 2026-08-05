@@ -47,10 +47,26 @@ function minutesDelta(now: number, before: number): string {
 export default function StatsPage() {
   const [stats, setStats] = useState<MyStats | null>(null);
   const [failed, setFailed] = useState(false);
+  const [months, setMonths] = useState(1);
+
+  // Restore the remembered range once, client-side.
+  useEffect(() => {
+    const saved = Number(window.localStorage.getItem("statsMonths"));
+    if (saved === 3 || saved === 6) setMonths(saved);
+  }, []);
 
   useEffect(() => {
-    api.get<MyStats>("/api/stats/me").then(setStats).catch(() => setFailed(true));
-  }, []);
+    api
+      .get<MyStats>(`/api/stats/me?months=${months}`)
+      .then(setStats)
+      .catch(() => setFailed(true));
+  }, [months]);
+
+  const pickRange = (m: number) => {
+    setMonths(m);
+    window.localStorage.setItem("statsMonths", String(m));
+  };
+  const rangeLabel = months === 1 ? "last 5 weeks" : `last ${months} months`;
 
   if (failed) {
     return <p className="px-4 py-8 text-center text-sm text-muted">Couldn&apos;t load your stats — pull to refresh.</p>;
@@ -96,6 +112,21 @@ export default function StatsPage() {
         {stats.sessions_total} sessions all-time · private to you
       </p>
 
+      <div className="flex rounded-xl bg-gray-100 p-1 text-sm font-medium">
+        {[1, 3, 6].map((m) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => pickRange(m)}
+            className={`flex-1 rounded-lg py-1.5 transition-colors ${
+              months === m ? "bg-surface text-ink shadow-sm" : "text-muted"
+            }`}
+          >
+            {m}M
+          </button>
+        ))}
+      </div>
+
       <div className="grid grid-cols-2 gap-2">
         {tiles.map((t) => (
           <Card key={t.label}>
@@ -116,9 +147,9 @@ export default function StatsPage() {
 
       <Card>
         <p className="mb-2 text-sm font-semibold">
-          Sessions per week <span className="font-normal text-muted">· last 8 weeks</span>
+          Sessions per week <span className="font-normal text-muted">· {rangeLabel}</span>
         </p>
-        <div className="flex h-24 items-end gap-1.5">
+        <div className="flex h-24 items-end gap-0.5">
           {stats.weekly_sessions.map((w, i) => (
             <div
               key={w.week_start}
@@ -132,18 +163,22 @@ export default function StatsPage() {
             />
           ))}
         </div>
-        <div className="mt-1 flex gap-1.5">
-          {stats.weekly_sessions.map((w) => (
-            <span key={w.week_start} className="flex-1 text-center text-[9px] text-muted">
-              {w.week_start.slice(5).replace("-", "/")}
-            </span>
-          ))}
+        <div className="mt-1 flex gap-0.5">
+          {stats.weekly_sessions.map((w, i) => {
+            const every = Math.max(1, Math.round(stats.weekly_sessions.length / 6));
+            const show = i % every === 0 || i === stats.weekly_sessions.length - 1;
+            return (
+              <span key={w.week_start} className="flex-1 text-center text-[9px] text-muted">
+                {show ? w.week_start.slice(5).replace("-", "/") : ""}
+              </span>
+            );
+          })}
         </div>
       </Card>
 
       <Card>
         <p className="mb-2 text-sm font-semibold">
-          Calories per session <span className="font-normal text-muted">· last 30 days</span>
+          Calories per session <span className="font-normal text-muted">· {rangeLabel}</span>
         </p>
         {stats.kcal_series.length === 0 ? (
           <p className="py-4 text-center text-sm text-muted">
