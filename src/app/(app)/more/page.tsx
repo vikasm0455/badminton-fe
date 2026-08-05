@@ -27,6 +27,16 @@ export default function MorePage() {
             <span className="ml-auto text-muted">›</span>
           </Link>
         ))}
+        <a
+          href="https://apps.apple.com/app/id6790264978?action=write-review"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-3 border-b border-gray-100 px-4 py-4"
+        >
+          <span className="text-xl">⭐</span>
+          <span className="font-medium">Rate RallyUp</span>
+          <span className="ml-auto text-muted">›</span>
+        </a>
         {user?.is_admin && (
           <Link href="/admin/members" className="flex items-center gap-3 border-t border-gray-100 px-4 py-4">
             <span className="text-xl">🛡️</span>
