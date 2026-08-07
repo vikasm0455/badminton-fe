@@ -104,6 +104,21 @@ export default function JoinByLinkPage() {
                 </Link>
               </div>
             )}
+            {/* Store routing: with the app installed this link opens RallyUp
+                directly (Universal Links); this badge covers everyone else. */}
+            <a
+              href="https://apps.apple.com/app/id6790264978"
+              className="mt-3 flex items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-white"
+            >
+              {/* Apple logo — inline SVG (the  glyph only renders on Apple platforms) */}
+              <svg viewBox="0 0 814 1000" className="h-5 w-5 fill-white" aria-hidden="true">
+                <path d="M788 341c-6 4-108 62-108 189 0 147 129 199 133 200-1 3-21 71-68 141-42 61-86 123-153 123s-84-39-161-39c-75 0-102 40-163 40s-104-57-153-127C58 787 12 664 12 547c0-187 122-286 242-286 64 0 117 42 157 42 38 0 97-45 169-45 27 0 125 3 208 83zM554 172c30-36 52-86 52-136 0-7-1-14-2-19-49 2-108 33-143 74-28 32-54 82-54 132 0 8 1 15 2 18 3 1 8 1 13 1 44 0 100-29 132-70z" />
+              </svg>
+              <span className="text-left leading-tight">
+                <span className="block text-[9px] text-gray-300">Download on the</span>
+                <span className="block text-sm font-semibold">App Store</span>
+              </span>
+            </a>
           </>
         )}
       </Card>

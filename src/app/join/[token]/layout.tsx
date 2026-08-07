@@ -15,10 +15,16 @@ export async function generateMetadata({
   params: { token: string };
 }): Promise<Metadata> {
   const robots = { index: false, follow: false };
+  // iOS Safari renders the native "RallyUp — GET/OPEN" smart banner from
+  // this; app-argument makes OPEN hand this exact link to the app.
+  const itunes = {
+    appId: "6790264978",
+    appArgument: `https://badmintonrallyup.com/join/${params.token}`,
+  };
   // Tokens are 32 hex chars — anything else never hits the API, so a crafted
   // "token" can't steer the server-side fetch to another path.
   if (!/^[0-9a-f]{32}$/i.test(params.token)) {
-    return { title: "Join a group — RallyUp", robots };
+    return { title: "Join a group — RallyUp", robots, itunes };
   }
   try {
     const res = await fetch(`${API_BASE}/api/join/${params.token}`, { cache: "no-store" });
@@ -30,13 +36,13 @@ export async function generateMetadata({
       if (info) {
         const title = `Join ${info.group_name} on RallyUp`;
         const description = `${info.invited_by_name} invited you · ${info.member_count} member${info.member_count === 1 ? "" : "s"} · polls, court timers & shared logins`;
-        return { title, description, robots, openGraph: { title, description, siteName: "RallyUp" } };
+        return { title, description, robots, itunes, openGraph: { title, description, siteName: "RallyUp" } };
       }
     }
   } catch {
     /* fall through to the generic preview */
   }
-  return { title: "Join a group — RallyUp", robots };
+  return { title: "Join a group — RallyUp", robots, itunes };
 }
 
 export default function JoinTokenLayout({ children }: { children: React.ReactNode }) {

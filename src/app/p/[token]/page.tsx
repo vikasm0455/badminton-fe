@@ -34,8 +34,14 @@ export async function generateMetadata({
   const { token } = params;
   const info = await fetchInfo(token);
   const robots = { index: false, follow: false };
+  // iOS Safari renders the native "RallyUp — GET/OPEN" smart banner from
+  // this; app-argument makes OPEN hand this exact link to the app.
+  const itunes = {
+    appId: "6790264978",
+    appArgument: `https://badmintonrallyup.com/p/${token}`,
+  };
   if (!info || info.ended || !info.poll) {
-    return { title: "Tonight's poll — RallyUp", robots };
+    return { title: "Tonight's poll — RallyUp", robots, itunes };
   }
   const p = info.poll;
   const title = `Playing tonight at ${p.proposed_time}? — ${p.group_name}`;
@@ -44,6 +50,7 @@ export async function generateMetadata({
     title,
     description,
     robots,
+    itunes,
     openGraph: { title, description, siteName: "RallyUp" },
   };
 }
