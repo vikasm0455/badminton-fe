@@ -83,11 +83,44 @@ const COURT_CLS: Record<CourtStatus, string> = {
 /** Timer turns amber inside the last 10 minutes (mock's `warn` state). */
 const WARN_SECONDS = 600;
 
+/**
+ * Timed-closure end for the closed card: "4:00 pm", club-local. Falls back to
+ * the raw string if the server already sent a display string, and to the
+ * viewer's timezone if the club tz is missing/invalid. Prefixes a short
+ * weekday when the reopen lands on a different club-local day.
+ */
+export function fmtClosedUntil(until: string, timezone?: string | null): string {
+  const d = new Date(until);
+  if (Number.isNaN(d.getTime())) return until;
+  const tz = timezone || undefined;
+  const timeOpts: Intl.DateTimeFormatOptions = {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  };
+  try {
+    const time = d.toLocaleTimeString([], { ...timeOpts, timeZone: tz }).toLowerCase();
+    const sameDay =
+      d.toLocaleDateString("en-CA", { timeZone: tz }) ===
+      new Date().toLocaleDateString("en-CA", { timeZone: tz });
+    return sameDay
+      ? time
+      : `${d.toLocaleDateString([], { weekday: "short", timeZone: tz })} ${time}`;
+  } catch {
+    /* invalid tz string — viewer-local is better than nothing */
+    return d.toLocaleTimeString([], timeOpts).toLowerCase();
+  }
+}
+
 export function CourtCard({
   court,
   sessionMinutes,
   action,
   resyncKey,
+  timezone,
+  onLeaveCourt,
+  onLeaveQueue,
+  leaveDisabled,
 }: {
   court: CourtView;
   sessionMinutes: number;
@@ -95,6 +128,14 @@ export function CourtCard({
   action?: ReactNode;
   /** Changes on every board push so the countdown re-syncs (e.g. board.now). */
   resyncKey?: unknown;
+  /** Club IANA timezone, for rendering timed-closure end times club-local. */
+  timezone?: string | null;
+  /** When set, renders the ghost "Leave court" button under the action slot. */
+  onLeaveCourt?: () => void;
+  /** When set, renders a subtle ✕ on every queue row (opens leave-queue). */
+  onLeaveQueue?: () => void;
+  /** Disables the leave controls (club closed), mirroring the action slot. */
+  leaveDisabled?: boolean;
 }) {
   const left = useCountdown(court.seconds_left ?? null, resyncKey);
   const showTimer = left != null && (court.status === "half" || court.status === "full");
@@ -113,9 +154,20 @@ export function CourtCard({
           Bring a group of 2 or 4 — your {sessionMinutes}-min session starts right away.
         </div>
       )}
-      {court.status === "closed" && (
-        <div className="qrow empty">{court.closed_reason || "Closed by staff"}</div>
-      )}
+      {court.status === "closed" &&
+        (court.closed_until ? (
+          <>
+            <div className="qrow empty">
+              Closed until {fmtClosedUntil(court.closed_until, timezone)}
+              {court.closed_reason ? ` · ${court.closed_reason}` : ""}
+            </div>
+            <div style={{ fontSize: "11.5px", color: "var(--text-dim)", textAlign: "center" }}>
+              reopens automatically
+            </div>
+          </>
+        ) : (
+          <div className="qrow empty">{court.closed_reason || "Closed by staff"}</div>
+        ))}
       {showTimer && (
         <div className={`court-timer${left < WARN_SECONDS ? " warn" : ""}`}>
           <span>{fmtMMSS(left)}</span>
@@ -152,6 +204,23 @@ export function CourtCard({
                 <span className="qpos">{q.position}</span>
                 <span>{q.label}</span>
                 <span className="qeta">~{q.eta_minutes} min</span>
+                {onLeaveQueue && (
+                  <button
+                    type="button"
+                    className="btn sm ghost"
+                    title="Leave the queue"
+                    disabled={leaveDisabled}
+                    style={{
+                      padding: "2px 7px",
+                      fontSize: 11,
+                      color: "var(--text-dim)",
+                      flex: "none",
+                    }}
+                    onClick={onLeaveQueue}
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
             ))
           )}
@@ -159,6 +228,17 @@ export function CourtCard({
       )}
 
       {action}
+      {onLeaveCourt && (
+        <button
+          type="button"
+          className="btn sm ghost"
+          style={{ color: "var(--text-dim)" }}
+          disabled={leaveDisabled}
+          onClick={onLeaveCourt}
+        >
+          Leave court
+        </button>
+      )}
     </div>
   );
 }
@@ -214,10 +294,13 @@ export function SegPlayers({
   value,
   onChange,
   disabled,
+  label = "Players",
 }: {
   value: 2 | 4;
   onChange: (players: 2 | 4) => void;
   disabled?: boolean;
+  /** Seg caption — "Players" for signups, "Leaving" in the leave modals. */
+  label?: string;
 }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
@@ -230,7 +313,7 @@ export function SegPlayers({
           fontWeight: 600,
         }}
       >
-        Players
+        {label}
       </span>
       <div className="seg">
         <button

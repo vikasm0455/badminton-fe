@@ -21,12 +21,14 @@ import { CourtCard, CredFields, Modal, SegPlayers, Topbar } from "../components"
 
 /* ------------------------------------------------------------- helpers */
 
-type ModalKind = "take" | "join" | "queue";
+type ModalKind = "take" | "join" | "queue" | "leave" | "leave_queue";
 
 const ACTION_PATH: Record<ModalKind, string> = {
   take: "take",
   join: "join",
   queue: "queue",
+  leave: "leave",
+  leave_queue: "queue/leave",
 };
 
 const emptyCreds = (): PlayerCred[] => [
@@ -118,7 +120,8 @@ export default function KioskBoard({ slug }: { slug: string }) {
 
   const openModal = (kind: ModalKind, court: number) => {
     setModal({ kind, court });
-    setCount(kind === "join" ? 2 : 4);
+    // Join is a fixed pair; leaving defaults to a pair (mock's "2" seg on).
+    setCount(kind === "take" || kind === "queue" ? 4 : 2);
     setValues(emptyCreds());
     setFieldErrors([]);
     setFormError(null);
@@ -241,7 +244,10 @@ export default function KioskBoard({ slug }: { slug: string }) {
 
   const modalCourt = modal ? board.courts.find((c) => c.number === modal.court) : undefined;
   const incomplete = values.slice(0, count).some((c) => !c.username.trim() || !c.password);
-  const submitDisabled = busy || incomplete || actionsDisabled;
+  // Leaving is deliberately NOT gated on opening hours (mirrors the server):
+  // players must always be able to sign off a court or step out of a queue.
+  const isLeaveKind = modal?.kind === "leave" || modal?.kind === "leave_queue";
+  const submitDisabled = busy || incomplete || (actionsDisabled && !isLeaveKind);
   const queuePosition = (modalCourt?.queue_len ?? 0) + 1;
 
   return (
@@ -291,14 +297,25 @@ export default function KioskBoard({ slug }: { slug: string }) {
               court={court}
               sessionMinutes={club.session_minutes}
               resyncKey={board.now}
+              timezone={club.timezone}
               action={actionFor(court)}
+              onLeaveCourt={
+                court.status === "half" || court.status === "full"
+                  ? () => openModal("leave", court.number)
+                  : undefined
+              }
+              onLeaveQueue={
+                court.queue.length > 0
+                  ? () => openModal("leave_queue", court.number)
+                  : undefined
+              }
             />
           ))}
         </div>
 
         <div className="foot-note">
-          Shared computer — nothing is saved. Credentials are checked for each action,
-          then forgotten.
+          Need a login? Walk-in signup station · Members: check-in station — both by
+          the front desk
         </div>
       </main>
 
@@ -412,6 +429,93 @@ export default function KioskBoard({ slug }: { slug: string }) {
               ),
             )}
           </b>
+        </div>
+        {formError && (
+          <div className="field-err" style={{ marginTop: 12 }}>
+            {formError}
+          </div>
+        )}
+      </Modal>
+
+      {/* Leave a court (pair or whole group) */}
+      <Modal
+        open={modal?.kind === "leave"}
+        onClose={closeModal}
+        title={`Leave Court ${modal?.court ?? ""}`}
+        sub="Leaving works like signing up — a pair leaves together, or the whole group."
+        footer={
+          <>
+            <button className="btn ghost" onClick={closeModal} disabled={busy}>
+              Cancel
+            </button>
+            <button className="btn danger" onClick={submit} disabled={submitDisabled}>
+              {busy ? "Validating…" : "Leave court"}
+            </button>
+          </>
+        }
+      >
+        <SegPlayers label="Leaving" value={count} onChange={setCount} disabled={busy} />
+        <CredFields
+          count={count}
+          values={values}
+          errors={fieldErrors}
+          onChange={setCred}
+          disabled={busy}
+        />
+        <div
+          style={{
+            marginTop: 16,
+            fontSize: 13,
+            color: "var(--text-dim)",
+            borderTop: "1px solid var(--line)",
+            paddingTop: 12,
+          }}
+        >
+          If everyone leaves, the court goes to the next group in the queue right away.
+        </div>
+        {formError && (
+          <div className="field-err" style={{ marginTop: 12 }}>
+            {formError}
+          </div>
+        )}
+      </Modal>
+
+      {/* Leave a queue (pair or whole group, same group only) */}
+      <Modal
+        open={modal?.kind === "leave_queue"}
+        onClose={closeModal}
+        title={`Leave the queue for Court ${modal?.court ?? ""}`}
+        sub="Leaving works like signing up — a pair steps out together, or the whole group."
+        footer={
+          <>
+            <button className="btn ghost" onClick={closeModal} disabled={busy}>
+              Cancel
+            </button>
+            <button className="btn danger" onClick={submit} disabled={submitDisabled}>
+              {busy ? "Validating…" : "Leave queue"}
+            </button>
+          </>
+        }
+      >
+        <SegPlayers label="Leaving" value={count} onChange={setCount} disabled={busy} />
+        <CredFields
+          count={count}
+          values={values}
+          errors={fieldErrors}
+          onChange={setCred}
+          disabled={busy}
+        />
+        <div
+          style={{
+            marginTop: 16,
+            fontSize: 13,
+            color: "var(--text-dim)",
+            borderTop: "1px solid var(--line)",
+            paddingTop: 12,
+          }}
+        >
+          Everyone leaving must be in the same queue group. If the whole group leaves,
+          everyone behind moves up a spot.
         </div>
         {formError && (
           <div className="field-err" style={{ marginTop: 12 }}>

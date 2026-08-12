@@ -1,10 +1,11 @@
 "use client";
 
-// CLUB ADMIN console — faithful port of the approved admin.html mock.
+// CLUB ADMIN console — faithful port of the approved admin.html mock (v2).
 // Flow: email+password sign-in (JWT in localStorage `rallyup_club_admin`) →
 // forced password change while must_change → console: stats row, configuration
-// form, courts & closures table, credentials panel. Any 401 from the API drops
-// the stored token and returns to the login screen.
+// form (incl. club timezone), courts & timed closures, "Today's logins"
+// (visible day-pass passwords), Members panel. Any 401 from the API drops the
+// stored token and returns to the login screen.
 
 import {
   CSSProperties,
@@ -19,8 +20,9 @@ import {
   AuthToken,
   BoardResponse,
   ClubConfig,
+  ClubMember,
   CourtsApiError,
-  CredentialPair,
+  CredentialKind,
   CredentialRow,
   KioskTheme,
   TOKEN_KEYS,
@@ -34,14 +36,29 @@ import { Chip, Modal, StatPanel, Topbar } from "../../components";
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
-/** Small uppercase label used inside the issue-credentials modal. */
-const PAIR_LABEL: CSSProperties = {
-  fontSize: 11,
-  letterSpacing: "0.08em",
-  textTransform: "uppercase",
-  color: "var(--text-dim)",
-  marginBottom: 6,
-};
+/** Curated IANA zones for the config select (the mock's 8 plus neighbors). */
+const CURATED_TIMEZONES = [
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Phoenix",
+  "America/Los_Angeles",
+  "America/Anchorage",
+  "Pacific/Honolulu",
+  "America/Toronto",
+  "America/Vancouver",
+  "Europe/London",
+  "Europe/Paris",
+  "Europe/Berlin",
+  "Asia/Kolkata",
+  "Asia/Singapore",
+  "Asia/Hong_Kong",
+  "Asia/Tokyo",
+  "Australia/Sydney",
+  "Pacific/Auckland",
+] as const;
+
+const OTHER_TZ = "other";
 
 function Clock() {
   const [now, setNow] = useState("");
@@ -61,13 +78,6 @@ function Clock() {
   return <span className="clock">{now}</span>;
 }
 
-function fmtIssued(iso: string): string {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime())
-    ? "—"
-    : d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-}
-
 /** Status chip per contract: revoked > on court > queued (with position) > free. */
 function whereChip(row: CredentialRow) {
   if (row.status === "revoked") return <Chip tone="dim">Revoked</Chip>;
@@ -82,6 +92,57 @@ function whereChip(row: CredentialRow) {
   return <Chip tone="ok">Free</Chip>;
 }
 
+function kindChip(kind: CredentialKind) {
+  return kind === "member" ? (
+    <Chip tone="cork">member</Chip>
+  ) : (
+    <Chip tone="dim">walk-in</Chip>
+  );
+}
+
+/**
+ * "14:05" — the current wall-clock time in the CLUB's timezone (close-modal
+ * From default). Closure windows are club-local, so an admin in another
+ * timezone must see the club's clock, not their own.
+ */
+function nowHHMM(tz?: string): string {
+  const opts: Intl.DateTimeFormatOptions = {
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  };
+  const d = new Date();
+  try {
+    return d.toLocaleTimeString("en-GB", tz ? { ...opts, timeZone: tz } : opts);
+  } catch {
+    return d.toLocaleTimeString("en-GB", opts); // invalid tz string — local fallback
+  }
+}
+
+/** <input type="time"> value shape ("HH:MM", zero-padded). */
+const HHMM_RE = /^\d{2}:\d{2}$/;
+
+/** Short time ("4:00 pm"-style) in the club's timezone; falls back to local. */
+function fmtTimeInZone(iso: string | null | undefined, tz?: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const opts: Intl.DateTimeFormatOptions = { hour: "numeric", minute: "2-digit" };
+  try {
+    return d.toLocaleTimeString([], tz ? { ...opts, timeZone: tz } : opts);
+  } catch {
+    return d.toLocaleTimeString([], opts); // invalid tz string — local fallback
+  }
+}
+
+/** "Jun 12" for the members table's Since column. */
+function fmtSince(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? "—"
+    : d.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
 /** Config form keeps numbers as strings so partial typing never NaN-crashes. */
 interface ConfigForm {
   court_count: string;
@@ -92,9 +153,14 @@ interface ConfigForm {
   closes_at: string;
   kiosk_theme: KioskTheme;
   brand_color: string;
+  /** One of CURATED_TIMEZONES or OTHER_TZ. */
+  timezone_select: string;
+  /** Free-text IANA zone used when timezone_select === OTHER_TZ. */
+  timezone_custom: string;
 }
 
 function formFromConfig(c: ClubConfig): ConfigForm {
+  const curated = (CURATED_TIMEZONES as readonly string[]).includes(c.timezone);
   return {
     court_count: String(c.court_count),
     session_minutes: String(c.session_minutes),
@@ -104,6 +170,8 @@ function formFromConfig(c: ClubConfig): ConfigForm {
     closes_at: c.closes_at.slice(0, 5),
     kiosk_theme: c.kiosk_theme,
     brand_color: c.brand_color,
+    timezone_select: curated ? c.timezone : OTHER_TZ,
+    timezone_custom: curated ? "" : c.timezone,
   };
 }
 
@@ -119,6 +187,7 @@ export default function ClubAdminPage({ params }: { params: { slug: string } }) 
   const [club, setClub] = useState<BoardResponse["club"] | null>(null);
   const [overview, setOverview] = useState<AdminOverview | null>(null);
   const [creds, setCreds] = useState<CredentialRow[]>([]);
+  const [members, setMembers] = useState<ClubMember[]>([]);
   const [loadErr, setLoadErr] = useState<string | null>(null);
 
   // Login / password-change screens.
@@ -140,19 +209,30 @@ export default function ClubAdminPage({ params }: { params: { slug: string } }) 
   // Courts & closures.
   const [closeTarget, setCloseTarget] = useState<number | null>(null);
   const [closeReason, setCloseReason] = useState("");
+  const [closeFrom, setCloseFrom] = useState("");
+  const [closeUntil, setCloseUntil] = useState("");
   const [closeErr, setCloseErr] = useState<string | null>(null);
   const [closing, setClosing] = useState(false);
   const [reopening, setReopening] = useState<number | null>(null);
   const [courtsErr, setCourtsErr] = useState<string | null>(null);
 
-  // Credentials.
-  const [pair, setPair] = useState<CredentialPair | null>(null);
-  const [issuing, setIssuing] = useState(false);
-  const [copied, setCopied] = useState(false);
+  // Today's logins.
   const [revokeTarget, setRevokeTarget] = useState<CredentialRow | null>(null);
   const [revoking, setRevoking] = useState(false);
   const [revokeErr, setRevokeErr] = useState<string | null>(null);
   const [credsErr, setCredsErr] = useState<string | null>(null);
+
+  // Members.
+  const [addOpen, setAddOpen] = useState(false);
+  const [addRef, setAddRef] = useState("");
+  const [addUsername, setAddUsername] = useState("");
+  const [addName, setAddName] = useState("");
+  const [addErr, setAddErr] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [removeTarget, setRemoveTarget] = useState<ClubMember | null>(null);
+  const [removing, setRemoving] = useState(false);
+  const [removeErr, setRemoveErr] = useState<string | null>(null);
+  const [membersErr, setMembersErr] = useState<string | null>(null);
 
   useEffect(() => {
     setToken(loadToken(TOKEN_KEYS.clubAdmin));
@@ -181,11 +261,13 @@ export default function ClubAdminPage({ params }: { params: { slug: string } }) 
     setMustChange(false);
     setOverview(null);
     setCreds([]);
+    setMembers([]);
     setForm(null);
     dirtyRef.current = false;
-    setPair(null);
     setCloseTarget(null);
     setRevokeTarget(null);
+    setAddOpen(false);
+    setRemoveTarget(null);
     setLoginErr("Session expired — sign in again.");
   }, []);
 
@@ -203,12 +285,14 @@ export default function ClubAdminPage({ params }: { params: { slug: string } }) 
 
   const refresh = useCallback(
     async (tok: string) => {
-      const [ov, rows] = await Promise.all([
+      const [ov, rows, mems] = await Promise.all([
         courtsApi.get<AdminOverview>(`/api/clubs/${slug}/admin/overview`, tok),
-        courtsApi.get<CredentialRow[]>(`/api/clubs/${slug}/admin/credentials?today=1`, tok),
+        courtsApi.get<CredentialRow[]>(`/api/clubs/${slug}/admin/credentials`, tok),
+        courtsApi.get<ClubMember[]>(`/api/clubs/${slug}/admin/members`, tok),
       ]);
       setOverview(ov);
       setCreds(rows);
+      setMembers(mems);
       setLoadErr(null);
       // Don't clobber in-progress edits with the server copy.
       setForm((prev) => (dirtyRef.current && prev ? prev : formFromConfig(ov.config)));
@@ -298,8 +382,12 @@ export default function ClubAdminPage({ params }: { params: { slug: string } }) 
     const session_minutes = parseInt(form.session_minutes, 10);
     const queue_depth = parseInt(form.queue_depth, 10);
     const brand_color = form.brand_color.trim();
-    if (!Number.isFinite(court_count) || court_count < 1) {
-      setConfigMsg({ err: "Number of courts must be at least 1." });
+    const timezone =
+      form.timezone_select === OTHER_TZ
+        ? form.timezone_custom.trim()
+        : form.timezone_select;
+    if (!Number.isFinite(court_count) || court_count < 1 || court_count > 100) {
+      setConfigMsg({ err: "Number of courts must be between 1 and 100." });
       return;
     }
     if (!Number.isFinite(session_minutes) || session_minutes < 15) {
@@ -314,9 +402,15 @@ export default function ClubAdminPage({ params }: { params: { slug: string } }) 
       setConfigMsg({ err: "Brand color must be a hex value like #b06f3c." });
       return;
     }
+    if (!timezone) {
+      setConfigMsg({ err: "Enter an IANA timezone like Europe/Amsterdam." });
+      return;
+    }
     setSavingConfig(true);
     setConfigMsg(null);
     try {
+      // Timezone strings are validated server-side (chrono-tz); a bad zone
+      // comes back as a message we surface inline right here.
       await courtsApi.patch(
         `/api/clubs/${slug}/admin/config`,
         {
@@ -328,6 +422,7 @@ export default function ClubAdminPage({ params }: { params: { slug: string } }) 
           closes_at: form.closes_at,
           kiosk_theme: form.kiosk_theme,
           brand_color,
+          timezone,
         },
         token,
       );
@@ -344,14 +439,39 @@ export default function ClubAdminPage({ params }: { params: { slug: string } }) 
 
   /* ----------------------------------------------------------- courts */
 
+  const openCloseModal = (courtNumber: number) => {
+    setCloseReason("");
+    setCloseFrom(nowHHMM(overview?.config.timezone));
+    setCloseUntil("");
+    setCloseErr(null);
+    setCloseTarget(courtNumber);
+  };
+
   const onCloseCourt = async () => {
     if (!token || closeTarget == null) return;
+    // Send the raw "HH:MM" wall-clock strings — the server interprets them in
+    // the CLUB's timezone (today). Converting to an ISO instant here would
+    // silently apply the admin BROWSER's timezone instead.
+    const from = closeFrom.trim();
+    const until = closeUntil.trim();
+    if (!HHMM_RE.test(from) || !HHMM_RE.test(until)) {
+      setCloseErr("Pick both From and Until times.");
+      return;
+    }
+    if (until <= from) {
+      setCloseErr("Until must be after From.");
+      return;
+    }
     setClosing(true);
     setCloseErr(null);
     try {
       await courtsApi.post(
         `/api/clubs/${slug}/admin/courts/${closeTarget}/close`,
-        { reason: closeReason.trim() },
+        {
+          reason: closeReason.trim(),
+          from,
+          until,
+        },
         token,
       );
       setCloseTarget(null);
@@ -379,39 +499,7 @@ export default function ClubAdminPage({ params }: { params: { slug: string } }) 
     }
   };
 
-  /* ------------------------------------------------------ credentials */
-
-  const onIssue = async () => {
-    if (!token) return;
-    setIssuing(true);
-    setCredsErr(null);
-    try {
-      const generated = await courtsApi.post<CredentialPair>(
-        `/api/clubs/${slug}/admin/credentials`,
-        undefined,
-        token,
-      );
-      setCopied(false);
-      setPair(generated);
-      refreshSafe(token);
-    } catch (err) {
-      const msg = guard(err);
-      if (msg) setCredsErr(msg);
-    } finally {
-      setIssuing(false);
-    }
-  };
-
-  const copyPair = async () => {
-    if (!pair) return;
-    try {
-      await navigator.clipboard.writeText(`${pair.username} / ${pair.password}`);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1600);
-    } catch {
-      /* clipboard blocked — the pair is on screen to copy by hand */
-    }
-  };
+  /* -------------------------------------------------- today's logins */
 
   const onRevoke = async () => {
     if (!token || !revokeTarget) return;
@@ -433,11 +521,69 @@ export default function ClubAdminPage({ params }: { params: { slug: string } }) 
     }
   };
 
+  /* ---------------------------------------------------------- members */
+
+  const openAddMember = () => {
+    setAddRef("");
+    setAddUsername("");
+    setAddName("");
+    setAddErr(null);
+    setAddOpen(true);
+  };
+
+  const onAddMember = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!token) return;
+    setAdding(true);
+    setAddErr(null);
+    try {
+      // Server owns validation (charset, username taken, duplicate member ID)
+      // — its message lands inline under the fields.
+      await courtsApi.post(
+        `/api/clubs/${slug}/admin/members`,
+        {
+          member_ref: addRef.trim(),
+          username: addUsername.trim(),
+          display_name: addName.trim() || null,
+        },
+        token,
+      );
+      setAddOpen(false);
+      await refreshSafe(token);
+    } catch (err) {
+      const msg = guard(err);
+      if (msg) setAddErr(msg);
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const onRemoveMember = async () => {
+    if (!token || !removeTarget) return;
+    setRemoving(true);
+    setRemoveErr(null);
+    try {
+      await courtsApi.post(
+        `/api/clubs/${slug}/admin/members/${removeTarget.id}/remove`,
+        undefined,
+        token,
+      );
+      setRemoveTarget(null);
+      await refreshSafe(token);
+    } catch (err) {
+      const msg = guard(err);
+      if (msg) setRemoveErr(msg);
+    } finally {
+      setRemoving(false);
+    }
+  };
+
   /* ---------------------------------------------------------- screens */
 
   const clubName = club?.name ?? slug;
   const brandColor = overview?.config.brand_color ?? club?.brand_color;
   const stats = overview?.stats;
+  const clubTz = overview?.config.timezone;
   const signedIn = !!token && !mustChange;
 
   const authCard: CSSProperties = { maxWidth: 460, margin: "64px auto 0", padding: "26px 28px" };
@@ -543,8 +689,11 @@ export default function ClubAdminPage({ params }: { params: { slug: string } }) 
           <a className="legend-row" href="#a-config" style={{ textDecoration: "none", color: "inherit" }}>
             <span className="dot" style={{ background: "var(--queue)" }} /> Configuration
           </a>
-          <a className="legend-row" href="#a-creds" style={{ textDecoration: "none", color: "inherit" }}>
-            <span className="dot" style={{ background: "var(--ok)" }} /> Credentials
+          <a className="legend-row" href="#a-logins" style={{ textDecoration: "none", color: "inherit" }}>
+            <span className="dot" style={{ background: "var(--ok)" }} /> Today&apos;s logins
+          </a>
+          <a className="legend-row" href="#a-members" style={{ textDecoration: "none", color: "inherit" }}>
+            <span className="dot" style={{ background: "var(--full)" }} /> Members
           </a>
         </nav>
         <div className="spacer" />
@@ -560,7 +709,7 @@ export default function ClubAdminPage({ params }: { params: { slug: string } }) 
           <StatPanel value={stats ? stats.courts : "—"} label="Courts" />
           <StatPanel value={stats ? stats.players_on_court : "—"} label="Players on court" />
           <StatPanel value={stats ? stats.groups_queued : "—"} label="Groups in queues" />
-          <StatPanel value={stats ? stats.credentials_today : "—"} label="Credentials issued today" />
+          <StatPanel value={stats ? stats.credentials_today : "—"} label="Logins issued today" />
         </div>
 
         {/* 2) Configuration */}
@@ -574,7 +723,7 @@ export default function ClubAdminPage({ params }: { params: { slug: string } }) 
                   <input
                     type="number"
                     min={1}
-                    max={50}
+                    max={100}
                     value={form.court_count}
                     onChange={(e) => setField("court_count", e.target.value)}
                   />
@@ -638,6 +787,33 @@ export default function ClubAdminPage({ params }: { params: { slug: string } }) 
                     value={form.closes_at}
                     onChange={(e) => setField("closes_at", e.target.value)}
                   />
+                </label>
+                <label className="field">
+                  <b>Club timezone</b>
+                  <select
+                    value={form.timezone_select}
+                    onChange={(e) => setField("timezone_select", e.target.value)}
+                  >
+                    {CURATED_TIMEZONES.map((tz) => (
+                      <option key={tz} value={tz}>
+                        {tz}
+                      </option>
+                    ))}
+                    <option value={OTHER_TZ}>Other…</option>
+                  </select>
+                  {form.timezone_select === OTHER_TZ && (
+                    <input
+                      type="text"
+                      className="mono"
+                      placeholder="IANA zone, e.g. Europe/Amsterdam"
+                      style={{ marginTop: 8 }}
+                      value={form.timezone_custom}
+                      onChange={(e) => setField("timezone_custom", e.target.value)}
+                    />
+                  )}
+                  <span style={{ color: "var(--text-dim)", fontSize: 12 }}>
+                    Day passes expire at midnight in this timezone.
+                  </span>
                 </label>
                 <label className="field">
                   <b>Kiosk theme</b>
@@ -709,7 +885,13 @@ export default function ClubAdminPage({ params }: { params: { slug: string } }) 
                     <td>Court {c.number}</td>
                     <td>{c.closed ? <Chip tone="dim">Closed</Chip> : <Chip tone="ok">Open</Chip>}</td>
                     <td className="mono" style={c.closed ? undefined : { color: "var(--text-dim)" }}>
-                      {c.closed ? c.closed_reason || "—" : "—"}
+                      {c.closed
+                        ? `${c.closed_reason || "—"}${
+                            c.closed_until
+                              ? ` · until ${fmtTimeInZone(c.closed_until, clubTz)}`
+                              : ""
+                          }`
+                        : "—"}
                     </td>
                     <td style={{ textAlign: "right" }}>
                       {c.closed ? (
@@ -721,14 +903,7 @@ export default function ClubAdminPage({ params }: { params: { slug: string } }) 
                           {reopening === c.number ? "Reopening…" : "Reopen"}
                         </button>
                       ) : (
-                        <button
-                          className="btn sm ghost"
-                          onClick={() => {
-                            setCloseReason("");
-                            setCloseErr(null);
-                            setCloseTarget(c.number);
-                          }}
-                        >
+                        <button className="btn sm ghost" onClick={() => openCloseModal(c.number)}>
                           Close…
                         </button>
                       )}
@@ -746,14 +921,12 @@ export default function ClubAdminPage({ params }: { params: { slug: string } }) 
           </table>
         </div>
 
-        {/* 4) Credentials */}
-        <div className="panel" id="a-creds">
-          <div style={{ display: "flex", alignItems: "center", marginBottom: 14 }}>
-            <h3 style={{ marginBottom: 0 }}>Credentials</h3>
-            <div className="spacer" style={{ flex: 1 }} />
-            <button className="btn primary" disabled={issuing} onClick={onIssue}>
-              {issuing ? "Issuing…" : "Issue credentials"}
-            </button>
+        {/* 4) Today's logins */}
+        <div className="panel" id="a-logins">
+          <h3 style={{ marginBottom: 4 }}>Today&apos;s logins</h3>
+          <div style={{ color: "var(--text-dim)", fontSize: "12.5px", marginBottom: 14 }}>
+            Every password expires at midnight{clubTz ? ` (${clubTz})` : ""}. Any staff member
+            can read a forgotten password back to a player.
           </div>
           {credsErr && (
             <div className="field-err" style={{ marginBottom: 10 }}>
@@ -764,47 +937,124 @@ export default function ClubAdminPage({ params }: { params: { slug: string } }) 
             <thead>
               <tr>
                 <th>Username</th>
-                <th>Issued</th>
-                <th>Status</th>
+                <th>Password</th>
+                <th>Type</th>
+                <th>Where</th>
                 <th />
               </tr>
             </thead>
             <tbody>
               {creds.length === 0 ? (
                 <tr>
-                  <td colSpan={4} style={{ color: "var(--text-dim)" }}>
-                    No credentials issued today.
+                  <td colSpan={5} style={{ color: "var(--text-dim)" }}>
+                    No logins yet today — walk-ins sign up and members check in at their
+                    stations.
                   </td>
                 </tr>
               ) : (
-                creds.map((row) => (
-                  <tr key={row.id}>
-                    <td
-                      className="mono"
-                      style={
-                        row.status === "revoked"
-                          ? { textDecoration: "line-through", color: "var(--text-dim)" }
-                          : undefined
-                      }
-                    >
-                      {row.username}
-                    </td>
-                    <td style={row.status === "revoked" ? { color: "var(--text-dim)" } : undefined}>
-                      {fmtIssued(row.issued_at)}
-                    </td>
-                    <td>{whereChip(row)}</td>
+                creds.map((row) => {
+                  const dimmed =
+                    row.status === "revoked" ? { color: "var(--text-dim)" } : undefined;
+                  return (
+                    <tr key={row.id}>
+                      <td
+                        className="mono"
+                        style={
+                          row.status === "revoked"
+                            ? { textDecoration: "line-through", color: "var(--text-dim)" }
+                            : undefined
+                        }
+                      >
+                        {row.username}
+                      </td>
+                      <td className="mono" style={dimmed}>
+                        {row.password}
+                      </td>
+                      <td>
+                        {kindChip(row.kind)}
+                        {row.member_name && (
+                          <span
+                            style={{
+                              marginLeft: 8,
+                              color: "var(--text-dim)",
+                              fontSize: "12.5px",
+                            }}
+                          >
+                            {row.member_name}
+                          </span>
+                        )}
+                      </td>
+                      <td>{whereChip(row)}</td>
+                      <td style={{ textAlign: "right" }}>
+                        {row.status === "active" && (
+                          <button
+                            className="btn sm ghost"
+                            onClick={() => {
+                              setRevokeErr(null);
+                              setRevokeTarget(row);
+                            }}
+                          >
+                            Revoke
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* 5) Members */}
+        <div className="panel" id="a-members">
+          <div style={{ display: "flex", alignItems: "center", marginBottom: 14 }}>
+            <h3 style={{ marginBottom: 0 }}>Members</h3>
+            <div className="spacer" style={{ flex: 1 }} />
+            <button className="btn primary" onClick={openAddMember}>
+              Add member
+            </button>
+          </div>
+          {membersErr && (
+            <div className="field-err" style={{ marginBottom: 10 }}>
+              {membersErr}
+            </div>
+          )}
+          <table className="list">
+            <thead>
+              <tr>
+                <th>Member ID</th>
+                <th>Username</th>
+                <th>Name</th>
+                <th>Since</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {members.length === 0 ? (
+                <tr>
+                  <td colSpan={5} style={{ color: "var(--text-dim)" }}>
+                    No members yet — link a member card with &ldquo;Add member&rdquo;.
+                  </td>
+                </tr>
+              ) : (
+                members.map((m) => (
+                  <tr key={m.id}>
+                    <td className="mono">{m.member_ref}</td>
+                    <td className="mono">{m.username}</td>
+                    <td>{m.display_name || "—"}</td>
+                    <td>{fmtSince(m.created_at)}</td>
                     <td style={{ textAlign: "right" }}>
-                      {row.status === "active" && (
-                        <button
-                          className="btn sm ghost"
-                          onClick={() => {
-                            setRevokeErr(null);
-                            setRevokeTarget(row);
-                          }}
-                        >
-                          Revoke
-                        </button>
-                      )}
+                      <button
+                        className="btn sm ghost"
+                        onClick={() => {
+                          setRemoveErr(null);
+                          setMembersErr(null);
+                          setRemoveTarget(m);
+                        }}
+                      >
+                        Remove
+                      </button>
                     </td>
                   </tr>
                 ))
@@ -835,47 +1085,11 @@ export default function ClubAdminPage({ params }: { params: { slug: string } }) 
 
       {token === undefined ? null : !token ? loginScreen : mustChange ? changeScreen : consoleScreen}
 
-      {/* Issue credentials modal — footer + note rendered in children to keep
-          the mock's order (buttons, then the dashed note underneath). */}
-      <Modal
-        open={pair !== null}
-        title="Issue credentials"
-        sub="Hand these to the player after payment. They work at this kiosk and in the BadmintonRallyUp app."
-        onClose={() => setPair(null)}
-      >
-        {pair && (
-          <div className="panel" style={{ textAlign: "center", padding: "26px 22px" }}>
-            <div style={PAIR_LABEL}>Username</div>
-            <div style={{ fontFamily: "var(--font-mono)", fontSize: 28, fontWeight: 500 }}>
-              {pair.username}
-            </div>
-            <div style={{ ...PAIR_LABEL, margin: "16px 0 6px" }}>Password</div>
-            <div style={{ fontFamily: "var(--font-mono)", fontSize: 28, fontWeight: 500 }}>
-              {pair.password}
-            </div>
-          </div>
-        )}
-        <div className="modal-foot">
-          <button className="btn ghost" onClick={() => window.print()}>
-            Print slip
-          </button>
-          <button className="btn primary" onClick={copyPair}>
-            {copied ? "Copied" : "Copy"}
-          </button>
-          <button className="btn ghost" onClick={() => setPair(null)}>
-            Done
-          </button>
-        </div>
-        <div className="note" style={{ marginTop: 18, marginBottom: 0 }}>
-          Generates a fresh unique pair each time — valid until you revoke it.
-        </div>
-      </Modal>
-
-      {/* Close court modal */}
+      {/* Close court modal — timed closure window */}
       <Modal
         open={closeTarget !== null}
         title={`Close Court ${closeTarget ?? ""}`}
-        sub="The court will show as closed on the kiosk until you reopen it."
+        sub="The court will show as closed on the kiosk for the window below."
         onClose={closing ? undefined : () => setCloseTarget(null)}
         footer={
           <>
@@ -884,7 +1098,7 @@ export default function ClubAdminPage({ params }: { params: { slug: string } }) 
             </button>
             <button
               className="btn danger"
-              disabled={closing || !closeReason.trim()}
+              disabled={closing || !closeReason.trim() || !closeUntil}
               onClick={onCloseCourt}
             >
               {closing ? "Closing…" : "Close court"}
@@ -903,8 +1117,38 @@ export default function ClubAdminPage({ params }: { params: { slug: string } }) 
             onChange={(e) => setCloseReason(e.target.value)}
           />
         </label>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 12,
+            marginTop: 12,
+          }}
+        >
+          <label className="field">
+            <b>From</b>
+            <input
+              type="time"
+              disabled={closing}
+              value={closeFrom}
+              onChange={(e) => setCloseFrom(e.target.value)}
+            />
+          </label>
+          <label className="field">
+            <b>Until</b>
+            <input
+              type="time"
+              disabled={closing}
+              value={closeUntil}
+              onChange={(e) => setCloseUntil(e.target.value)}
+            />
+          </label>
+        </div>
+        <div style={{ color: "var(--text-dim)", fontSize: "12.5px", marginTop: 10 }}>
+          The court reopens automatically when the window ends.
+        </div>
         <div style={{ color: "var(--full-text)", fontSize: 13, marginTop: 12 }}>
-          The playing group can finish its session, but the court's queued groups are
+          The playing group can finish its session, but the court&apos;s queued groups are
           released — redirect them at the front desk.
         </div>
         {closeErr && (
@@ -918,7 +1162,7 @@ export default function ClubAdminPage({ params }: { params: { slug: string } }) 
       <Modal
         open={revokeTarget !== null}
         title={`Revoke ${revokeTarget?.username ?? ""}?`}
-        sub="The slip stops working at the kiosk and in the app right away. This can't be undone."
+        sub="Today's password stops working at the stations and kiosk right away. This can't be undone."
         onClose={revoking ? undefined : () => setRevokeTarget(null)}
         footer={
           <>
@@ -932,6 +1176,97 @@ export default function ClubAdminPage({ params }: { params: { slug: string } }) 
         }
       >
         {revokeErr && <div className="field-err">{revokeErr}</div>}
+      </Modal>
+
+      {/* Add member modal */}
+      <Modal
+        open={addOpen}
+        title="Add member"
+        sub="Link a club member card to a permanent username."
+        onClose={adding ? undefined : () => setAddOpen(false)}
+      >
+        <form onSubmit={onAddMember}>
+          <label className="field">
+            <b>Member ID</b>
+            <input
+              type="text"
+              className="mono"
+              placeholder="As printed on their card, e.g. NL-1203"
+              autoFocus
+              required
+              disabled={adding}
+              value={addRef}
+              onChange={(e) => setAddRef(e.target.value)}
+            />
+          </label>
+          <label className="field" style={{ marginTop: 12 }}>
+            <b>Username (permanent)</b>
+            <input
+              type="text"
+              className="mono"
+              placeholder="e.g. netrusher"
+              required
+              disabled={adding}
+              value={addUsername}
+              onChange={(e) => setAddUsername(e.target.value)}
+            />
+          </label>
+          <label className="field" style={{ marginTop: 12 }}>
+            <b>Name (optional)</b>
+            <input
+              type="text"
+              placeholder="e.g. Sam P."
+              disabled={adding}
+              value={addName}
+              onChange={(e) => setAddName(e.target.value)}
+            />
+          </label>
+          <div style={{ color: "var(--text-dim)", fontSize: "12.5px", marginTop: 10 }}>
+            The member gets a fresh password each day at the kiosk with just their member ID.
+          </div>
+          {addErr && (
+            <div className="field-err" style={{ marginTop: 10 }}>
+              {addErr}
+            </div>
+          )}
+          <div className="modal-foot">
+            <button
+              className="btn ghost"
+              type="button"
+              disabled={adding}
+              onClick={() => setAddOpen(false)}
+            >
+              Cancel
+            </button>
+            <button
+              className="btn primary"
+              type="submit"
+              disabled={adding || !addRef.trim() || !addUsername.trim()}
+            >
+              {adding ? "Adding…" : "Add member"}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Remove member confirm */}
+      <Modal
+        open={removeTarget !== null}
+        title={`Remove ${removeTarget?.username ?? ""}?`}
+        sub="If they checked in today, that login is revoked right away. Their username frees up for anyone from tomorrow."
+        onClose={removing ? undefined : () => setRemoveTarget(null)}
+        footer={
+          <>
+            <button className="btn ghost" disabled={removing} onClick={() => setRemoveTarget(null)}>
+              Cancel
+            </button>
+            <button className="btn danger" disabled={removing} onClick={onRemoveMember}>
+              {removing ? "Removing…" : "Remove member"}
+            </button>
+          </>
+        }
+      >
+        {removeErr && <div className="field-err">{removeErr}</div>}
       </Modal>
     </>
   );

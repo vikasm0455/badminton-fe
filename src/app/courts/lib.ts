@@ -10,13 +10,17 @@ export type CourtStatus = "available" | "half" | "full" | "closed";
 export type ClubStatus = "onboarding" | "live" | "suspended";
 export type KioskTheme = "light" | "dark";
 export type CredentialStatus = "active" | "revoked";
+export type CredentialKind = "walkin" | "member";
 export type CredErrorCode =
   | "not_found"
+  | "expired"
   | "revoked"
   | "bad_password"
   | "on_court"
   | "in_queue"
-  | "duplicate";
+  | "duplicate"
+  | "not_on_court"
+  | "not_in_queue";
 
 /** The API's standard response envelope. */
 export interface ApiEnvelope<T> {
@@ -49,6 +53,10 @@ export interface CourtView {
   number: number;
   status: CourtStatus;
   closed_reason?: string | null;
+  /** ISO timestamp of a timed closure's end (v2) — formatted in the club tz. */
+  closed_until?: string | null;
+  /** Server-rendered "HH:MM" of closed_until in the club tz (fallback display). */
+  closed_until_display?: string | null;
   players: string[];
   seconds_left?: number | null;
   queue: QueueEntry[];
@@ -67,6 +75,8 @@ export interface BoardClub {
   opens_at: string;
   closes_at: string;
   open_now: boolean;
+  /** IANA club timezone (v2) — used to render closure times club-local. */
+  timezone?: string | null;
 }
 
 export interface BoardResponse {
@@ -84,12 +94,16 @@ export interface ClubConfig {
   closes_at: string;
   kiosk_theme: KioskTheme;
   brand_color: string;
+  /** IANA timezone (chrono-tz validated server-side); day passes expire at midnight here. */
+  timezone: string;
 }
 
 export interface AdminCourtRow {
   number: number;
   closed: boolean;
   closed_reason: string | null;
+  /** End of the current closure window (RFC3339), null for open courts. */
+  closed_until?: string | null;
 }
 
 export interface AdminStats {
@@ -115,15 +129,28 @@ export interface CredentialRow {
   id: string;
   username: string;
   password: string;
+  kind: CredentialKind;
+  /** Display name of the linked member (kind === "member" only). */
+  member_name?: string | null;
   status: CredentialStatus;
   issued_at: string;
   where: CredentialWhere;
 }
 
-/** The freshly generated pair returned by POST admin/credentials. */
+/** A generated username+password pair (walk-in signup / member check-in result). */
 export interface CredentialPair {
   username: string;
   password: string;
+}
+
+/** One club member: a permanent username linked to the club's physical member card. */
+export interface ClubMember {
+  id: string;
+  /** The ID printed/encoded on the member's card. */
+  member_ref: string;
+  username: string;
+  display_name: string | null;
+  created_at: string;
 }
 
 export interface PlatformClub {
@@ -259,6 +286,8 @@ export function credErrorMessage(err: CredentialError): string {
   switch (err.code) {
     case "not_found":
       return `${err.username || "This username"} isn't recognized — check the slip`;
+    case "expired":
+      return `${err.username}'s day pass has expired — get a new one at the station`;
     case "revoked":
       return `${err.username} has been revoked — ask the front desk`;
     case "bad_password":
@@ -273,6 +302,14 @@ export function credErrorMessage(err: CredentialError): string {
         : `${err.username} is already in a queue`;
     case "duplicate":
       return `${err.username} is entered twice in this group`;
+    case "not_on_court":
+      return err.court_number != null
+        ? `${err.username} isn't playing on Court ${err.court_number}`
+        : `${err.username} isn't playing on this court`;
+    case "not_in_queue":
+      return err.court_number != null
+        ? `${err.username} isn't in the queue for Court ${err.court_number}`
+        : `${err.username} isn't in this queue`;
   }
 }
 
@@ -375,4 +412,80 @@ export function useBoardStream(
       clearInterval(tick);
     };
   }, [slug]);
+}
+
+/* -------------------------------------- v2: self-serve station endpoints */
+
+/** POST /api/clubs/{slug}/walkin/check result. */
+export interface WalkinCheckResult {
+  available: boolean;
+  reason?: string | null;
+}
+
+/** POST /api/clubs/{slug}/checkin result — member identity + today's login. */
+export interface CheckinResult {
+  display_name: string | null;
+  member_ref: string;
+  username: string;
+  password: string;
+}
+
+/** Walk-in username charset rule (mirror of the server's validation). */
+export const WALKIN_USERNAME_RE = /^[a-z0-9_.-]{3,20}$/;
+
+/** Is the desired walk-in username free today? */
+export function walkinCheck(slug: string, username: string): Promise<WalkinCheckResult> {
+  return courtsApi.post<WalkinCheckResult>(`/api/clubs/${slug}/walkin/check`, { username });
+}
+
+/** Create today's walk-in day pass; resolves to the generated pair. */
+export function walkinCreate(slug: string, username: string): Promise<CredentialPair> {
+  return courtsApi.post<CredentialPair>(`/api/clubs/${slug}/walkin/create`, { username });
+}
+
+/** Member check-in: find-or-create today's credential for a member card ID. */
+export function memberCheckin(slug: string, memberRef: string): Promise<CheckinResult> {
+  return courtsApi.post<CheckinResult>(`/api/clubs/${slug}/checkin`, { member_ref: memberRef });
+}
+
+/**
+ * One-shot club branding fetch for the station pages: GET board once, keep
+ * `club` for the header/theme. A 404 (unknown or suspended club) yields the
+ * same not-available message the kiosk board shows; transient failures retry
+ * every 5 s until the club loads.
+ */
+export function useStationClub(slug: string): {
+  club: BoardClub | null;
+  error: string | null;
+} {
+  const [club, setClub] = useState<BoardClub | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!slug) return;
+    let cancelled = false;
+    let retry: ReturnType<typeof setTimeout> | null = null;
+
+    const load = async () => {
+      try {
+        const board = await courtsApi.get<BoardResponse>(`/api/clubs/${slug}/board`);
+        if (!cancelled) setClub(board.club);
+      } catch (e) {
+        if (cancelled) return;
+        if (e instanceof CourtsApiError && e.status === 404) {
+          setError("This club isn’t available. Check the kiosk URL with the front desk.");
+        } else {
+          retry = setTimeout(load, 5_000);
+        }
+      }
+    };
+    load();
+
+    return () => {
+      cancelled = true;
+      if (retry) clearTimeout(retry);
+    };
+  }, [slug]);
+
+  return { club, error };
 }
