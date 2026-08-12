@@ -182,6 +182,19 @@ export interface AuthToken {
   must_change?: boolean;
 }
 
+/**
+ * Response of the slug-less club-admin login (POST /api/courts/admin/login):
+ * the AuthToken plus the admin's identity and the club to route into. `club`
+ * is what the email door needs to push to /courts/<slug>/admin.
+ */
+export interface AdminEmailLogin {
+  token: string;
+  must_change: boolean;
+  name: string;
+  email: string;
+  club: { slug: string; name: string };
+}
+
 /* ------------------------------------------------------------ fetching */
 
 /** localStorage keys for the two console JWTs. */

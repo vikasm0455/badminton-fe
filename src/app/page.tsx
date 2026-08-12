@@ -5,6 +5,19 @@ import { useEffect } from "react";
 import { useAuth } from "@/lib/auth";
 import { isIosNeedingInstall } from "@/lib/push";
 import { Button, Card, Spinner } from "@/components/ui";
+import Landing from "./(marketing)/Landing";
+
+/** True when running as an installed PWA (home-screen app), not a browser tab.
+ *  Mirrors the standalone-detection pattern used in lib/push.ts. */
+function isStandalonePwa(): boolean {
+  if (typeof window === "undefined") return false;
+  const displayModeStandalone =
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(display-mode: standalone)").matches;
+  const iosStandalone =
+    (window.navigator as unknown as { standalone?: boolean }).standalone === true;
+  return displayModeStandalone || iosStandalone;
+}
 
 export default function SplashPage() {
   const { user, loading } = useAuth();
@@ -22,6 +35,13 @@ export default function SplashPage() {
         <Spinner />
       </div>
     );
+  }
+
+  // Signed-out visitors in a normal browser see the marketing landing.
+  // Installed PWA (home-screen app) users keep the app splash so their
+  // icon opens straight to login, not to marketing.
+  if (!isStandalonePwa()) {
+    return <Landing />;
   }
 
   const iosInstall = typeof window !== "undefined" && isIosNeedingInstall();
